@@ -66,17 +66,7 @@ jobs:
     needs:
       - prepare
       - create-release
-    runs-on: ${{ matrix.os }}
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - os: ubuntu-latest
-            build_args: --linux AppImage
-          - os: windows-latest
-            build_args: --win nsis
-          - os: macos-latest
-            build_args: --mac dmg
+    runs-on: windows-latest
 
     steps:
       - name: Checkout
@@ -99,7 +89,7 @@ jobs:
       - name: Build app executable
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: false
-        run: npx electron-builder ${{ matrix.build_args }} --publish never
+        run: npx electron-builder --win nsis --publish never
 
       - name: Upload release assets
         uses: softprops/action-gh-release@v2

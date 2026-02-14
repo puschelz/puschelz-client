@@ -9,7 +9,7 @@
     "clean:release": "node scripts/fs-tasks.cjs clean-release",
     "copy:renderer": "node scripts/fs-tasks.cjs copy-renderer",
     "build": "npm run clean && tsc -p tsconfig.json && npm run copy:renderer",
-    "dist": "npm run build && npm run clean:release && electron-builder --publish never",
+    "dist": "npm run build && npm run clean:release && electron-builder --win nsis --publish never",
     "start": "npm run build && electron .",
     "dev": "npm run build && electron .",
     "test:watch": "vitest src/**/*.test.ts"
@@ -52,20 +52,9 @@
       "output": "release",
       "buildResources": "assets"
     },
-    "linux": {
-      "target": [
-        "AppImage"
-      ],
-      "category": "Utility"
-    },
     "win": {
       "target": [
         "nsis"
-      ]
-    },
-    "mac": {
-      "target": [
-        "dmg"
       ]
     }
   }
