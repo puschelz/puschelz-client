@@ -201,7 +201,7 @@ function openSettingsWindow(): void {
     },
   });
 
-  const htmlPath = path.join(app.getAppPath(), "src", "renderer", "config.html");
+  const htmlPath = path.join(app.getAppPath(), "dist", "renderer", "config.html");
   void settingsWindow.loadFile(htmlPath);
 
   settingsWindow.on("closed", () => {
