@@ -1,6 +1,6 @@
 {
   "name": "puschelz-client",
-  "version": "0.1.3",
+  "version": "0.1.4",
   "description": "Puschelz desktop tray client for WoW addon sync",
   "main": "dist/main.js",
   "scripts": {
