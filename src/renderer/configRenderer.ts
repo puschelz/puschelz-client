@@ -11,6 +11,19 @@ const saveButton = document.getElementById("saveConfig") as HTMLButtonElement;
 const browseButton = document.getElementById("browsePath") as HTMLButtonElement;
 const syncButton = document.getElementById("syncNow") as HTMLButtonElement;
 
+type ActionResult = {
+  ok: boolean;
+  message: string;
+};
+
+type PuschelzBridge = {
+  loadState: () => Promise<{ config: SyncConfig; status: SyncStatus }>;
+  saveConfig: (config: SyncConfig) => Promise<ActionResult>;
+  pickWowPath: () => Promise<string | null>;
+  syncNow: () => Promise<ActionResult>;
+  onStatus: (listener: (status: SyncStatus) => void) => () => void;
+};
+
 function formatTimestamp(timestamp: number | null): string {
   if (!timestamp) {
     return "Never";
@@ -36,6 +49,14 @@ function setButtonsDisabled(disabled: boolean): void {
   syncButton.disabled = disabled;
 }
 
+function bridge(): PuschelzBridge | null {
+  const candidate = (window as Window & { puschelz?: PuschelzBridge }).puschelz;
+  if (!candidate) {
+    return null;
+  }
+  return candidate;
+}
+
 function readConfigFromForm(): SyncConfig {
   return {
     endpointUrl: endpointInput.value.trim(),
@@ -45,20 +66,37 @@ function readConfigFromForm(): SyncConfig {
 }
 
 async function init(): Promise<void> {
-  const state = await window.puschelz.loadState();
+  const api = bridge();
+  if (!api) {
+    setButtonsDisabled(true);
+    setActionFeedback(
+      "error",
+      "Client bridge is unavailable. Please restart the app (settings window is disconnected)."
+    );
+    return;
+  }
+
+  const state = await api.loadState();
   endpointInput.value = state.config.endpointUrl;
   tokenInput.value = state.config.apiToken;
   wowPathInput.value = state.config.wowPath;
   renderStatus(state.status);
+  setActionFeedback("info", "Ready.");
 
-  window.puschelz.onStatus(renderStatus);
+  api.onStatus(renderStatus);
 }
 
 saveButton.addEventListener("click", async () => {
+  const api = bridge();
+  if (!api) {
+    setActionFeedback("error", "Save failed: client bridge unavailable.");
+    return;
+  }
+
   setButtonsDisabled(true);
   setActionFeedback("info", "Saving settings...");
   try {
-    const result = await window.puschelz.saveConfig(readConfigFromForm());
+    const result = await api.saveConfig(readConfigFromForm());
     setActionFeedback(result.ok ? "success" : "error", result.message);
   } catch (error) {
     setActionFeedback("error", `Save failed: ${String(error)}`);
@@ -68,10 +106,16 @@ saveButton.addEventListener("click", async () => {
 });
 
 browseButton.addEventListener("click", async () => {
+  const api = bridge();
+  if (!api) {
+    setActionFeedback("error", "Browse failed: client bridge unavailable.");
+    return;
+  }
+
   setButtonsDisabled(true);
   setActionFeedback("info", "Opening file picker...");
   try {
-    const picked = await window.puschelz.pickWowPath();
+    const picked = await api.pickWowPath();
     if (picked) {
       wowPathInput.value = picked;
       setActionFeedback("success", `Selected path: ${picked}`);
@@ -86,16 +130,30 @@ browseButton.addEventListener("click", async () => {
 });
 
 syncButton.addEventListener("click", async () => {
+  const api = bridge();
+  if (!api) {
+    setActionFeedback("error", "Sync failed: client bridge unavailable.");
+    return;
+  }
+
   setButtonsDisabled(true);
   setActionFeedback("info", "Running manual sync...");
   try {
-    const result = await window.puschelz.syncNow();
+    const result = await api.syncNow();
     setActionFeedback(result.ok ? "success" : "error", result.message);
   } catch (error) {
     setActionFeedback("error", `Sync failed: ${String(error)}`);
   } finally {
     setButtonsDisabled(false);
   }
+});
+
+window.addEventListener("error", (event) => {
+  setActionFeedback("error", `UI runtime error: ${event.message}`);
+});
+
+window.addEventListener("unhandledrejection", (event) => {
+  setActionFeedback("error", `UI promise error: ${String(event.reason)}`);
 });
 
 void init();

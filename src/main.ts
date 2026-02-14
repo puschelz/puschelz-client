@@ -24,6 +24,20 @@ type ActionResult = {
   message: string;
 };
 
+function listMissingConfig(config: SyncConfig): string[] {
+  const missing: string[] = [];
+  if (!config.endpointUrl.trim()) {
+    missing.push("endpoint URL");
+  }
+  if (!config.apiToken.trim()) {
+    missing.push("API token");
+  }
+  if (!config.wowPath.trim()) {
+    missing.push("WoW path");
+  }
+  return missing;
+}
+
 function getConfig(): SyncConfig {
   return configStore.getConfig();
 }
@@ -132,15 +146,17 @@ function getCallbacks() {
 
 async function startWatcher(): Promise<ActionResult> {
   const config = getConfig();
-  if (!config.endpointUrl || !config.apiToken || !config.wowPath) {
+  const missing = listMissingConfig(config);
+  if (missing.length > 0) {
+    const missingText = missing.join(", ");
     setStatus({
       state: "idle",
-      detail: "Configure endpoint URL, API token, and WoW path",
+      detail: `Missing required settings: ${missingText}`,
       watchedFile: null,
     });
     return {
       ok: true,
-      message: "Saved. Add API token and WoW path to start syncing.",
+      message: `Saved. Missing required settings: ${missingText}.`,
     };
   }
 
@@ -165,8 +181,23 @@ async function startWatcher(): Promise<ActionResult> {
 }
 
 async function runManualSync(): Promise<ActionResult> {
+  const config = getConfig();
+  const missing = listMissingConfig(config);
+  if (missing.length > 0) {
+    const missingText = missing.join(", ");
+    const message = `Cannot sync. Missing required settings: ${missingText}.`;
+    setStatus({
+      state: "error",
+      detail: message,
+    });
+    return {
+      ok: false,
+      message,
+    };
+  }
+
   try {
-    await addonWatcher.syncNow(getConfig(), getCallbacks());
+    await addonWatcher.syncNow(config, getCallbacks());
     return {
       ok: true,
       message: "Manual sync completed successfully.",
