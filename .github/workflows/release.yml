@@ -4,22 +4,63 @@ on:
   push:
     tags:
       - 'v*'
+  workflow_run:
+    workflows:
+      - Version Bump
+    types:
+      - completed
 
 permissions:
   contents: write
 
 jobs:
+  prepare:
+    if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    outputs:
+      tag_name: ${{ steps.resolve.outputs.tag_name }}
+      source_sha: ${{ steps.resolve.outputs.source_sha }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Resolve tag and source SHA
+        id: resolve
+        run: |
+          if [ "${{ github.event_name }}" = "push" ]; then
+            echo "tag_name=${GITHUB_REF_NAME}" >> "$GITHUB_OUTPUT"
+            echo "source_sha=${GITHUB_SHA}" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          SOURCE_SHA="${{ github.event.workflow_run.head_sha }}"
+          git fetch --tags origin
+          TAG_NAME=$(git tag --points-at "${SOURCE_SHA}" | sort -V | tail -n1)
+
+          if [ -z "${TAG_NAME}" ]; then
+            echo "No release tag found for workflow_run head SHA ${SOURCE_SHA}"
+            exit 1
+          fi
+
+          echo "tag_name=${TAG_NAME}" >> "$GITHUB_OUTPUT"
+          echo "source_sha=${SOURCE_SHA}" >> "$GITHUB_OUTPUT"
+
   create-release:
+    needs: prepare
     runs-on: ubuntu-latest
     steps:
       - name: Create GitHub release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ github.ref_name }}
+          tag_name: ${{ needs.prepare.outputs.tag_name }}
           generate_release_notes: true
 
   build:
-    needs: create-release
+    needs:
+      - prepare
+      - create-release
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -35,6 +76,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.prepare.outputs.source_sha }}
 
       - name: Setup Node
         uses: actions/setup-node@v4
@@ -56,5 +99,5 @@ jobs:
       - name: Upload release assets
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ github.ref_name }}
+          tag_name: ${{ needs.prepare.outputs.tag_name }}
           files: release/*
