@@ -10,15 +10,49 @@ const DEFAULT_CONFIG: SyncConfig = {
 };
 
 export class ConfigStore {
-  private readonly configPath: string;
+  private configPath: string | null = null;
 
-  constructor() {
-    this.configPath = path.join(app.getPath("userData"), "config.json");
+  private getStableConfigPath(): string {
+    if (this.configPath) {
+      return this.configPath;
+    }
+
+    // Keep settings in a version-independent location to survive upgrades.
+    const stableDir = path.join(app.getPath("appData"), "Puschelz Client");
+    this.configPath = path.join(stableDir, "config.json");
+    return this.configPath;
+  }
+
+  private getLegacyConfigPaths(): string[] {
+    const appName = app.getName();
+    return [
+      path.join(app.getPath("userData"), "config.json"),
+      path.join(app.getPath("appData"), appName, "config.json"),
+    ];
+  }
+
+  private migrateLegacyConfigIfNeeded(targetPath: string): void {
+    if (fs.existsSync(targetPath)) {
+      return;
+    }
+
+    for (const legacyPath of this.getLegacyConfigPaths()) {
+      if (!legacyPath || legacyPath === targetPath || !fs.existsSync(legacyPath)) {
+        continue;
+      }
+
+      fs.mkdirSync(path.dirname(targetPath), { recursive: true });
+      fs.copyFileSync(legacyPath, targetPath);
+      return;
+    }
   }
 
   getConfig(): SyncConfig {
+    const configPath = this.getStableConfigPath();
+    this.migrateLegacyConfigIfNeeded(configPath);
+
     try {
-      const raw = fs.readFileSync(this.configPath, "utf8");
+      const raw = fs.readFileSync(configPath, "utf8");
       const parsed = JSON.parse(raw) as Partial<SyncConfig>;
       return {
         endpointUrl: parsed.endpointUrl ?? DEFAULT_CONFIG.endpointUrl,
@@ -31,7 +65,8 @@ export class ConfigStore {
   }
 
   saveConfig(nextConfig: SyncConfig): void {
-    fs.mkdirSync(path.dirname(this.configPath), { recursive: true });
-    fs.writeFileSync(this.configPath, JSON.stringify(nextConfig, null, 2), "utf8");
+    const configPath = this.getStableConfigPath();
+    fs.mkdirSync(path.dirname(configPath), { recursive: true });
+    fs.writeFileSync(configPath, JSON.stringify(nextConfig, null, 2), "utf8");
   }
 }
