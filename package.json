@@ -1,0 +1,72 @@
+{
+  "name": "puschelz-client",
+  "version": "0.1.0",
+  "description": "Puschelz desktop tray client for WoW addon sync",
+  "main": "dist/main.js",
+  "scripts": {
+    "test": "vitest run src/**/*.test.ts",
+    "clean": "rm -rf dist",
+    "clean:release": "rm -rf release",
+    "build": "npm run clean && tsc -p tsconfig.json",
+    "dist": "npm run build && npm run clean:release && electron-builder --publish never",
+    "start": "npm run build && electron .",
+    "dev": "npm run build && electron .",
+    "test:watch": "vitest src/**/*.test.ts"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/puschelz/puschelz-client.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/puschelz/puschelz-client/issues"
+  },
+  "homepage": "https://github.com/puschelz/puschelz-client#readme",
+  "private": true,
+  "dependencies": {
+    "chokidar": "^5.0.0",
+    "electron": "^40.4.1",
+    "fast-glob": "^3.3.3",
+    "luaparse": "^0.3.1"
+  },
+  "devDependencies": {
+    "@types/node": "^25.2.3",
+    "electron-builder": "^26.7.0",
+    "typescript": "^5.9.3",
+    "vitest": "^4.0.18"
+  },
+  "build": {
+    "appId": "com.puschelz.client",
+    "productName": "Puschelz Client",
+    "artifactName": "${productName}-${version}-${os}-${arch}.${ext}",
+    "files": [
+      "dist/**/*",
+      "src/renderer/**/*",
+      "assets/**/*",
+      "package.json"
+    ],
+    "directories": {
+      "output": "release",
+      "buildResources": "assets"
+    },
+    "linux": {
+      "target": [
+        "AppImage"
+      ],
+      "category": "Utility"
+    },
+    "win": {
+      "target": [
+        "nsis"
+      ]
+    },
+    "mac": {
+      "target": [
+        "dmg"
+      ]
+    }
+  }
+}
