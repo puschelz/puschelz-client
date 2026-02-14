@@ -28,12 +28,12 @@
   "private": true,
   "dependencies": {
     "chokidar": "^5.0.0",
-    "electron": "^40.4.1",
     "fast-glob": "^3.3.3",
     "luaparse": "^0.3.1"
   },
   "devDependencies": {
     "@types/node": "^25.2.3",
+    "electron": "^40.4.1",
     "electron-builder": "^26.7.0",
     "typescript": "^5.9.3",
     "vitest": "^4.0.18"
