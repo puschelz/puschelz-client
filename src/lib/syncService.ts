@@ -6,6 +6,14 @@ import { parseSavedVariables } from "./luaParser";
 export class SyncService {
   private lastContentHash: string | null = null;
 
+  private resolveSyncUrl(endpointUrl: string): string {
+    const trimmed = endpointUrl.trim().replace(/\/+$/, "");
+    if (/\/api\/addon-sync$/i.test(trimmed)) {
+      return trimmed;
+    }
+    return `${trimmed}/api/addon-sync`;
+  }
+
   async sync(filePath: string, config: SyncConfig): Promise<void> {
     const missing: string[] = [];
     if (!config.endpointUrl.trim()) {
@@ -26,7 +34,7 @@ export class SyncService {
 
     const parsed = parseSavedVariables(source);
 
-    const endpoint = config.endpointUrl.replace(/\/$/, "");
+    const syncUrl = this.resolveSyncUrl(config.endpointUrl);
     const headers = {
       "Content-Type": "application/json",
       Authorization: `Bearer ${config.apiToken}`,
@@ -48,7 +56,7 @@ export class SyncService {
     ];
 
     for (const payload of payloads) {
-      const response = await fetch(`${endpoint}/api/addon-sync`, {
+      const response = await fetch(syncUrl, {
         method: "POST",
         headers,
         body: JSON.stringify(payload),
@@ -56,7 +64,21 @@ export class SyncService {
 
       if (!response.ok) {
         const body = await response.text();
-        throw new Error(`Sync failed (${response.status}): ${body}`);
+        const contentType = response.headers.get("content-type") ?? "";
+
+        if (response.status === 401) {
+          throw new Error(
+            `Sync authentication failed (401) at ${syncUrl}. Check your API token.`
+          );
+        }
+
+        if (response.status === 404 && contentType.includes("text/html")) {
+          throw new Error(
+            `Sync endpoint not found (404) at ${syncUrl}. The configured URL does not host /api/addon-sync. Use your Convex site URL (for example https://<deployment>.convex.site) or paste the full /api/addon-sync URL.`
+          );
+        }
+
+        throw new Error(`Sync failed (${response.status}) at ${syncUrl}: ${body}`);
       }
     }
 
