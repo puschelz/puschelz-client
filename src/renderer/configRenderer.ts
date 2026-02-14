@@ -1,4 +1,15 @@
-import type { SyncConfig, SyncStatus } from "../lib/types";
+type SyncConfig = {
+  endpointUrl: string;
+  apiToken: string;
+  wowPath: string;
+};
+
+type SyncStatus = {
+  state: "idle" | "watching" | "syncing" | "error";
+  detail: string;
+  lastSyncedAt: number | null;
+  watchedFile: string | null;
+};
 
 const endpointInput = document.getElementById("endpointUrl") as HTMLInputElement;
 const tokenInput = document.getElementById("apiToken") as HTMLInputElement;
