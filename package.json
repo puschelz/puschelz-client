@@ -5,9 +5,9 @@
   "main": "dist/main.js",
   "scripts": {
     "test": "vitest run src/**/*.test.ts",
-    "clean": "rm -rf dist",
-    "clean:release": "rm -rf release",
-    "copy:renderer": "mkdir -p dist/renderer && cp src/renderer/config.html dist/renderer/config.html",
+    "clean": "node scripts/fs-tasks.cjs clean-dist",
+    "clean:release": "node scripts/fs-tasks.cjs clean-release",
+    "copy:renderer": "node scripts/fs-tasks.cjs copy-renderer",
     "build": "npm run clean && tsc -p tsconfig.json && npm run copy:renderer",
     "dist": "npm run build && npm run clean:release && electron-builder --publish never",
     "start": "npm run build && electron .",
