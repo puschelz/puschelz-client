@@ -71,6 +71,31 @@
         font-weight: 700;
       }
 
+      button:disabled {
+        opacity: 0.55;
+        cursor: wait;
+      }
+
+      #actionFeedback {
+        margin-top: 14px;
+        padding: 10px 12px;
+        border-radius: 8px;
+        border: 1px solid #334155;
+        background: #0f172a;
+        color: var(--muted);
+        font-size: 13px;
+      }
+
+      #actionFeedback[data-kind="success"] {
+        border-color: #166534;
+        color: #86efac;
+      }
+
+      #actionFeedback[data-kind="error"] {
+        border-color: #991b1b;
+        color: #fca5a5;
+      }
+
       #status,
       #watchedFile,
       #lastSyncedAt {
@@ -100,6 +125,7 @@
         <button id="saveConfig">Save</button>
         <button id="syncNow">Sync now</button>
       </div>
+      <div id="actionFeedback" data-kind="info">Ready.</div>
       <div id="status"></div>
       <div id="watchedFile"></div>
       <div id="lastSyncedAt"></div>

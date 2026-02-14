@@ -1,5 +1,6 @@
 import path from "node:path";
 import { app, BrowserWindow, dialog, ipcMain, Menu, Tray, nativeImage } from "electron";
+import type { OpenDialogOptions } from "electron";
 import { AddonWatcher } from "./lib/addonWatcher";
 import { ConfigStore } from "./lib/configStore";
 import type { SyncConfig, SyncStatus } from "./lib/types";
@@ -16,6 +17,11 @@ let status: SyncStatus = {
   detail: "Waiting for configuration",
   lastSyncedAt: null,
   watchedFile: null,
+};
+
+type ActionResult = {
+  ok: boolean;
+  message: string;
 };
 
 function getConfig(): SyncConfig {
@@ -124,7 +130,7 @@ function getCallbacks() {
   };
 }
 
-async function startWatcher(): Promise<void> {
+async function startWatcher(): Promise<ActionResult> {
   const config = getConfig();
   if (!config.endpointUrl || !config.apiToken || !config.wowPath) {
     setStatus({
@@ -132,28 +138,49 @@ async function startWatcher(): Promise<void> {
       detail: "Configure endpoint URL, API token, and WoW path",
       watchedFile: null,
     });
-    return;
+    return {
+      ok: true,
+      message: "Saved. Add API token and WoW path to start syncing.",
+    };
   }
 
   try {
     await addonWatcher.start(config, getCallbacks());
+    return {
+      ok: true,
+      message: "Saved and watcher started successfully.",
+    };
   } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
     setStatus({
       state: "error",
-      detail: error instanceof Error ? error.message : String(error),
+      detail: message,
       watchedFile: null,
     });
+    return {
+      ok: false,
+      message: `Saved, but watcher failed to start: ${message}`,
+    };
   }
 }
 
-async function runManualSync(): Promise<void> {
+async function runManualSync(): Promise<ActionResult> {
   try {
     await addonWatcher.syncNow(getConfig(), getCallbacks());
+    return {
+      ok: true,
+      message: "Manual sync completed successfully.",
+    };
   } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
     setStatus({
       state: "error",
-      detail: error instanceof Error ? error.message : String(error),
+      detail: message,
     });
+    return {
+      ok: false,
+      message: `Manual sync failed: ${message}`,
+    };
   }
 }
 
@@ -183,10 +210,14 @@ function openSettingsWindow(): void {
 }
 
 async function pickWowPath(): Promise<string | null> {
-  const result = await dialog.showOpenDialog({
+  const dialogOptions: OpenDialogOptions = {
     properties: ["openDirectory", "openFile"],
     title: "Select WoW directory or direct Puschelz.lua path",
-  });
+    buttonLabel: "Select",
+  };
+  const result = settingsWindow
+    ? await dialog.showOpenDialog(settingsWindow, dialogOptions)
+    : await dialog.showOpenDialog(dialogOptions);
 
   if (result.canceled || result.filePaths.length === 0) {
     return null;
@@ -198,15 +229,15 @@ async function pickWowPath(): Promise<string | null> {
 function registerIpcHandlers(): void {
   ipcMain.handle("state:load", async () => ({ config: getConfig(), status }));
 
-  ipcMain.handle("config:save", async (_event, config: SyncConfig) => {
+  ipcMain.handle("config:save", async (_event, config: SyncConfig): Promise<ActionResult> => {
     configStore.saveConfig(config);
-    await startWatcher();
+    return await startWatcher();
   });
 
   ipcMain.handle("wowPath:pick", async () => pickWowPath());
 
-  ipcMain.handle("sync:now", async () => {
-    await runManualSync();
+  ipcMain.handle("sync:now", async (): Promise<ActionResult> => {
+    return await runManualSync();
   });
 }
 

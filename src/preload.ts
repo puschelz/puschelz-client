@@ -6,11 +6,17 @@ type RendererState = {
   status: SyncStatus;
 };
 
+type ActionResult = {
+  ok: boolean;
+  message: string;
+};
+
 contextBridge.exposeInMainWorld("puschelz", {
   loadState: async (): Promise<RendererState> => ipcRenderer.invoke("state:load"),
-  saveConfig: async (config: SyncConfig): Promise<void> => ipcRenderer.invoke("config:save", config),
+  saveConfig: async (config: SyncConfig): Promise<ActionResult> =>
+    ipcRenderer.invoke("config:save", config),
   pickWowPath: async (): Promise<string | null> => ipcRenderer.invoke("wowPath:pick"),
-  syncNow: async (): Promise<void> => ipcRenderer.invoke("sync:now"),
+  syncNow: async (): Promise<ActionResult> => ipcRenderer.invoke("sync:now"),
   onStatus: (listener: (status: SyncStatus) => void) => {
     const wrapped = (_event: Electron.IpcRendererEvent, status: SyncStatus) => listener(status);
     ipcRenderer.on("status:changed", wrapped);
@@ -22,9 +28,9 @@ declare global {
   interface Window {
     puschelz: {
       loadState: () => Promise<RendererState>;
-      saveConfig: (config: SyncConfig) => Promise<void>;
+      saveConfig: (config: SyncConfig) => Promise<ActionResult>;
       pickWowPath: () => Promise<string | null>;
-      syncNow: () => Promise<void>;
+      syncNow: () => Promise<ActionResult>;
       onStatus: (listener: (status: SyncStatus) => void) => () => void;
     };
   }
