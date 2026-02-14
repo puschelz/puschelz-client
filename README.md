@@ -29,7 +29,7 @@ npm start
 
 3. Open tray icon -> `Open Settings` and configure:
 
-- `Website Base URL` (example: `https://your-puschelz-site.example`)
+- `Website Base URL` (pre-filled default: `https://puschelz.de`)
 - `API Token` (generated in Puschelz profile)
 - `WoW Path` (WoW root folder or direct `Puschelz.lua` path)
 
@@ -54,3 +54,8 @@ The client resolves one file using this order:
 3. `<wowPath>/WTF/Account/*/SavedVariables/Puschelz.lua`
 
 If multiple account matches exist, the most recently modified file is used.
+
+## WoW path auto-detection
+
+- On Windows, when `WoW Path` is empty, the app tries Blizzard WoW registry keys (`InstallPath`) and fills the first valid path automatically.
+- If registry lookup fails, it falls back to common install locations under `C:\\Program Files` and `C:\\Program Files (x86)`.

@@ -4,7 +4,7 @@ import { app } from "electron";
 import type { SyncConfig } from "./types";
 
 const DEFAULT_CONFIG: SyncConfig = {
-  endpointUrl: "",
+  endpointUrl: "https://puschelz.de",
   apiToken: "",
   wowPath: "",
 };
@@ -21,7 +21,7 @@ export class ConfigStore {
       const raw = fs.readFileSync(this.configPath, "utf8");
       const parsed = JSON.parse(raw) as Partial<SyncConfig>;
       return {
-        endpointUrl: parsed.endpointUrl ?? "",
+        endpointUrl: parsed.endpointUrl ?? DEFAULT_CONFIG.endpointUrl,
         apiToken: parsed.apiToken ?? "",
         wowPath: parsed.wowPath ?? "",
       };

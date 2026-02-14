@@ -3,6 +3,7 @@ import { app, BrowserWindow, dialog, ipcMain, Menu, Tray, nativeImage } from "el
 import { AddonWatcher } from "./lib/addonWatcher";
 import { ConfigStore } from "./lib/configStore";
 import type { SyncConfig, SyncStatus } from "./lib/types";
+import { detectWowInstallPath } from "./lib/wowPathDetection";
 
 const configStore = new ConfigStore();
 const addonWatcher = new AddonWatcher();
@@ -19,6 +20,29 @@ let status: SyncStatus = {
 
 function getConfig(): SyncConfig {
   return configStore.getConfig();
+}
+
+function applyConfigDefaultsAndAutoDetection(): void {
+  const config = getConfig();
+  let changed = false;
+  const nextConfig: SyncConfig = { ...config };
+
+  if (!nextConfig.endpointUrl) {
+    nextConfig.endpointUrl = "https://puschelz.de";
+    changed = true;
+  }
+
+  if (!nextConfig.wowPath) {
+    const detected = detectWowInstallPath();
+    if (detected) {
+      nextConfig.wowPath = detected;
+      changed = true;
+    }
+  }
+
+  if (changed) {
+    configStore.saveConfig(nextConfig);
+  }
 }
 
 function setStatus(next: Partial<SyncStatus>): void {
@@ -196,6 +220,7 @@ function createTray(): void {
 
 app.whenReady().then(async () => {
   app.setAppUserModelId("com.puschelz.client");
+  applyConfigDefaultsAndAutoDetection();
   createTray();
   registerIpcHandlers();
   await startWatcher();
