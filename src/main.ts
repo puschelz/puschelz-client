@@ -88,6 +88,8 @@ function refreshTrayMenu(): void {
   tray.setToolTip(`Puschelz: ${statusLabel()}`);
 
   const menu = Menu.buildFromTemplate([
+    { label: `Version: v${app.getVersion()}`, enabled: false },
+    { type: "separator" },
     { label: `Status: ${status.state}`, enabled: false },
     { label: status.detail, enabled: false },
     {
