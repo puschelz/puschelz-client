@@ -40,12 +40,17 @@ jobs:
           TAG_NAME=$(git tag --points-at "${SOURCE_SHA}" | sort -V | tail -n1)
 
           if [ -z "${TAG_NAME}" ]; then
-            echo "No release tag found for workflow_run head SHA ${SOURCE_SHA}"
+            TAG_NAME=$(git tag --merged origin/main --list 'v*' --sort=-v:refname | head -n1)
+          fi
+
+          if [ -z "${TAG_NAME}" ]; then
+            echo "No release tag found for workflow_run"
             exit 1
           fi
 
+          TAG_SHA=$(git rev-list -n1 "${TAG_NAME}")
           echo "tag_name=${TAG_NAME}" >> "$GITHUB_OUTPUT"
-          echo "source_sha=${SOURCE_SHA}" >> "$GITHUB_OUTPUT"
+          echo "source_sha=${TAG_SHA}" >> "$GITHUB_OUTPUT"
 
   create-release:
     needs: prepare
