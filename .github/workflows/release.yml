@@ -89,8 +89,30 @@ jobs:
           ELECTRON_LOCALES: en-US,de
         run: npm run dist
 
+      - name: List built artifacts
+        shell: pwsh
+        run: |
+          if (Test-Path release) {
+            Write-Host "Artifacts under release/:"
+            Get-ChildItem -Path release -Recurse -File | Select-Object FullName, Length
+          } else {
+            Write-Host "No release/ directory found."
+          }
+          if (Test-Path out) {
+            Write-Host "Artifacts under out/:"
+            Get-ChildItem -Path out -Recurse -File | Select-Object FullName, Length
+          } else {
+            Write-Host "No out/ directory found."
+          }
+
       - name: Upload release assets
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ needs.prepare.outputs.tag_name }}
-          files: release/make/squirrel.windows/x64/*
+          files: |
+            release/make/squirrel.windows/**/*.exe
+            release/make/squirrel.windows/**/*.nupkg
+            release/make/squirrel.windows/**/RELEASES
+            out/make/squirrel.windows/**/*.exe
+            out/make/squirrel.windows/**/*.nupkg
+            out/make/squirrel.windows/**/RELEASES
