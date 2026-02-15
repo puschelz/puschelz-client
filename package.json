@@ -1,5 +1,6 @@
 {
   "name": "puschelz-client",
+  "productName": "Puschelz Client",
   "version": "0.1.15",
   "description": "Puschelz desktop tray client for WoW addon sync",
   "main": "dist/main.js",
@@ -9,9 +10,11 @@
     "clean:release": "node scripts/fs-tasks.cjs clean-release",
     "copy:renderer": "node scripts/fs-tasks.cjs copy-renderer",
     "build": "npm run clean && tsc -p tsconfig.json && npm run copy:renderer",
-    "dist": "npm run build && npm run clean:release && electron-builder --win nsis --publish never",
-    "start": "npm run build && electron .",
-    "dev": "npm run build && electron .",
+    "package": "npm run build && npm run clean:release && electron-forge package",
+    "make": "npm run build && npm run clean:release && electron-forge make",
+    "dist": "npm run make -- --platform=win32",
+    "start": "npm run build && electron-forge start",
+    "dev": "npm run start",
     "test:watch": "vitest src/**/*.test.ts"
   },
   "repository": {
@@ -19,7 +22,7 @@
     "url": "git+https://github.com/puschelz/puschelz-client.git"
   },
   "keywords": [],
-  "author": "",
+  "author": "Puschelz",
   "license": "ISC",
   "type": "commonjs",
   "bugs": {
@@ -27,41 +30,20 @@
   },
   "homepage": "https://github.com/puschelz/puschelz-client#readme",
   "private": true,
+  "config": {
+    "forge": "./forge.config.js"
+  },
   "dependencies": {
     "chokidar": "^5.0.0",
     "fast-glob": "^3.3.3",
     "luaparse": "^0.3.1"
   },
   "devDependencies": {
+    "@electron-forge/cli": "^7.11.1",
+    "@electron-forge/maker-squirrel": "^7.11.1",
     "@types/node": "^25.2.3",
     "electron": "^40.4.1",
-    "electron-builder": "^26.7.0",
     "typescript": "^5.9.3",
     "vitest": "^4.0.18"
-  },
-  "build": {
-    "appId": "com.puschelz.client",
-    "productName": "Puschelz Client",
-    "icon": "assets/icon.png",
-    "artifactName": "${productName}-${version}-${os}-${arch}.${ext}",
-    "files": [
-      "dist/**/*",
-      "assets/**/*",
-      "package.json"
-    ],
-    "directories": {
-      "output": "release",
-      "buildResources": "assets"
-    },
-    "win": {
-      "icon": "assets/icon.ico",
-      "target": [
-        "nsis"
-      ]
-    },
-    "nsis": {
-      "installerIcon": "assets/icon.ico",
-      "uninstallerIcon": "assets/icon.ico"
-    }
   }
 }
