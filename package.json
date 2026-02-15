@@ -12,7 +12,7 @@
     "build": "npm run clean && tsc -p tsconfig.json && npm run copy:renderer",
     "package": "npm run build && npm run clean:release && electron-forge package",
     "make": "npm run build && npm run clean:release && electron-forge make",
-    "dist": "npm run make -- --platform=win32",
+    "dist": "npm run make -- --platform=win32 --targets=@electron-forge/maker-squirrel",
     "start": "npm run build && electron-forge start",
     "dev": "npm run start",
     "test:watch": "vitest src/**/*.test.ts"

@@ -105,6 +105,30 @@ jobs:
             Write-Host "No out/ directory found."
           }
 
+      - name: Verify squirrel artifacts exist
+        shell: pwsh
+        run: |
+          $patterns = @(
+            "release/make/squirrel.windows/**/*.exe",
+            "release/make/squirrel.windows/**/*.nupkg",
+            "release/make/squirrel.windows/**/RELEASES",
+            "out/make/squirrel.windows/**/*.exe",
+            "out/make/squirrel.windows/**/*.nupkg",
+            "out/make/squirrel.windows/**/RELEASES"
+          )
+
+          $found = @()
+          foreach ($pattern in $patterns) {
+            $found += Get-ChildItem -Path $pattern -File -ErrorAction SilentlyContinue
+          }
+
+          if ($found.Count -eq 0) {
+            Write-Error "No Squirrel release artifacts were produced by Forge."
+          } else {
+            Write-Host "Found Squirrel artifacts:"
+            $found | Select-Object FullName, Length -Unique
+          }
+
       - name: Upload release assets
         uses: softprops/action-gh-release@v2
         with:
