@@ -8,18 +8,23 @@ const localesAllowList = (process.env.ELECTRON_LOCALES || DEFAULT_LOCALES.join('
   .map((locale) => locale.trim())
   .filter(Boolean);
 
-async function keepOnlyConfiguredLocales(buildPath) {
+function keepOnlyConfiguredLocales(buildPath, _electronVersion, _platform, _arch, done) {
   const localesDir = path.join(buildPath, 'locales');
 
   if (!fs.existsSync(localesDir)) {
+    done();
     return;
   }
 
-  const localeFiles = await fsp.readdir(localesDir);
-  const allowed = new Set(localesAllowList.map((locale) => `${locale}.pak`));
-  const toDelete = localeFiles.filter((file) => file.endsWith('.pak') && !allowed.has(file));
-
-  await Promise.all(toDelete.map((file) => fsp.unlink(path.join(localesDir, file))));
+  fsp
+    .readdir(localesDir)
+    .then((localeFiles) => {
+      const allowed = new Set(localesAllowList.map((locale) => `${locale}.pak`));
+      const toDelete = localeFiles.filter((file) => file.endsWith('.pak') && !allowed.has(file));
+      return Promise.all(toDelete.map((file) => fsp.unlink(path.join(localesDir, file))));
+    })
+    .then(() => done())
+    .catch((error) => done(error));
 }
 
 module.exports = {
