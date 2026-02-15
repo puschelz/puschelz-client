@@ -1,5 +1,15 @@
 # AGENTS
 
+## Repo-Local Skills
+
+- `electron-pro`: `.codex/skills/electron-pro/SKILL.md`
+
+Scope policy:
+
+1. Keep Electron-specific skills vendored in this repository under `.codex/skills/`.
+2. Do not install Electron skills into `~/.codex/skills` for this project.
+3. When updating this skill, modify the repo-local copy only.
+
 ## CI Sync Rule
 
 When changing build tooling, packaging tooling, or dependency managers/scripts, update matching GitHub Actions workflows in the same PR.
