@@ -42,6 +42,7 @@
   "build": {
     "appId": "com.puschelz.client",
     "productName": "Puschelz Client",
+    "icon": "assets/icon.png",
     "artifactName": "${productName}-${version}-${os}-${arch}.${ext}",
     "files": [
       "dist/**/*",
@@ -53,9 +54,14 @@
       "buildResources": "assets"
     },
     "win": {
+      "icon": "assets/icon.ico",
       "target": [
         "nsis"
       ]
+    },
+    "nsis": {
+      "installerIcon": "assets/icon.ico",
+      "uninstallerIcon": "assets/icon.ico"
     }
   }
 }
