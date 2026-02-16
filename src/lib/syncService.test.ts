@@ -6,7 +6,7 @@ import { SyncService } from "./syncService";
 
 const LUA_FIXTURE = `
 PuschelzDB = {
-  schemaVersion = 13,
+  schemaVersion = 14,
   updatedAt = 1739400000000,
   guildBank = {
     lastScannedAt = 1739400000000,
