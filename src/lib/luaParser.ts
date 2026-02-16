@@ -1,5 +1,11 @@
 import { parse } from "luaparse";
-import type { CalendarEvent, GuildBankItem, GuildBankTab, ParsedPuschelzDb } from "./types";
+import type {
+  CalendarEvent,
+  CalendarEventAttendee,
+  GuildBankItem,
+  GuildBankTab,
+  ParsedPuschelzDb,
+} from "./types";
 
 type LuaNode = {
   type: string;
@@ -117,6 +123,26 @@ function parseGuildBankTabs(value: unknown): GuildBankTab[] {
     }));
 }
 
+function parseCalendarAttendees(value: unknown): CalendarEventAttendee[] | undefined {
+  if (!Array.isArray(value)) {
+    return undefined;
+  }
+
+  const attendees = value
+    .filter((attendee): attendee is Record<string, unknown> => !!attendee && typeof attendee === "object")
+    .map((attendee) => {
+      const name = asString(attendee.name);
+      const status = asString(attendee.status);
+      if (!name || (status !== "signedUp" && status !== "tentative")) {
+        return null;
+      }
+      return { name, status };
+    })
+    .filter((attendee): attendee is CalendarEventAttendee => attendee !== null);
+
+  return attendees.length > 0 ? attendees : undefined;
+}
+
 function parseCalendarEvents(value: unknown): CalendarEvent[] {
   if (!Array.isArray(value)) {
     return [];
@@ -124,13 +150,17 @@ function parseCalendarEvents(value: unknown): CalendarEvent[] {
 
   return value
     .filter((event): event is Record<string, unknown> => !!event && typeof event === "object")
-    .map((event) => ({
-      wowEventId: asNumber(event.wowEventId),
-      title: asString(event.title),
-      eventType: event.eventType === "world" ? "world" : "raid",
-      startTime: asNumber(event.startTime),
-      endTime: asNumber(event.endTime),
-    }));
+    .map((event) => {
+      const attendees = parseCalendarAttendees(event.attendees);
+      return {
+        wowEventId: asNumber(event.wowEventId),
+        title: asString(event.title),
+        eventType: event.eventType === "world" ? "world" : "raid",
+        startTime: asNumber(event.startTime),
+        endTime: asNumber(event.endTime),
+        ...(attendees ? { attendees } : {}),
+      };
+    });
 }
 
 export function parseSavedVariables(luaSource: string): ParsedPuschelzDb {

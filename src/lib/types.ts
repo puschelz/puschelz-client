@@ -18,6 +18,12 @@ export type CalendarEvent = {
   eventType: "raid" | "world";
   startTime: number;
   endTime: number;
+  attendees?: CalendarEventAttendee[];
+};
+
+export type CalendarEventAttendee = {
+  name: string;
+  status: "signedUp" | "tentative";
 };
 
 export type ParsedPuschelzDb = {
