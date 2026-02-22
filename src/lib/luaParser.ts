@@ -93,12 +93,46 @@ function asString(value: unknown): string {
   return typeof value === "string" ? value : "";
 }
 
-function parseGuildBankItems(value: unknown): GuildBankItem[] {
-  if (!Array.isArray(value)) {
+function asLuaArray(value: unknown): unknown[] | null {
+  if (Array.isArray(value)) {
+    return value;
+  }
+
+  if (!value || typeof value !== "object") {
+    return null;
+  }
+
+  const keys = Object.keys(value as Record<string, unknown>);
+  if (keys.length === 0) {
     return [];
   }
 
-  return value
+  const numericKeys = keys
+    .map((key) => Number(key))
+    .filter((key) => Number.isInteger(key) && key > 0)
+    .sort((a, b) => a - b);
+
+  if (numericKeys.length !== keys.length) {
+    return null;
+  }
+
+  for (let index = 0; index < numericKeys.length; index += 1) {
+    if (numericKeys[index] !== index + 1) {
+      return null;
+    }
+  }
+
+  const table = value as Record<string, unknown>;
+  return numericKeys.map((key) => table[String(key)]);
+}
+
+function parseGuildBankItems(value: unknown): GuildBankItem[] {
+  const rows = asLuaArray(value);
+  if (!rows) {
+    return [];
+  }
+
+  return rows
     .filter((item): item is Record<string, unknown> => !!item && typeof item === "object")
     .map((item) => ({
       slotIndex: asNumber(item.slotIndex),
@@ -110,11 +144,12 @@ function parseGuildBankItems(value: unknown): GuildBankItem[] {
 }
 
 function parseGuildBankTabs(value: unknown): GuildBankTab[] {
-  if (!Array.isArray(value)) {
+  const rows = asLuaArray(value);
+  if (!rows) {
     return [];
   }
 
-  return value
+  return rows
     .filter((tab): tab is Record<string, unknown> => !!tab && typeof tab === "object")
     .map((tab) => ({
       tabIndex: asNumber(tab.tabIndex),
@@ -124,11 +159,12 @@ function parseGuildBankTabs(value: unknown): GuildBankTab[] {
 }
 
 function parseCalendarAttendees(value: unknown): CalendarEventAttendee[] | undefined {
-  if (!Array.isArray(value)) {
+  const rows = asLuaArray(value);
+  if (!rows) {
     return undefined;
   }
 
-  const attendees = value
+  const attendees = rows
     .filter((attendee): attendee is Record<string, unknown> => !!attendee && typeof attendee === "object")
     .map((attendee) => {
       const name = asString(attendee.name);
@@ -144,11 +180,12 @@ function parseCalendarAttendees(value: unknown): CalendarEventAttendee[] | undef
 }
 
 function parseCalendarEvents(value: unknown): CalendarEvent[] {
-  if (!Array.isArray(value)) {
+  const rows = asLuaArray(value);
+  if (!rows) {
     return [];
   }
 
-  return value
+  return rows
     .filter((event): event is Record<string, unknown> => !!event && typeof event === "object")
     .map((event) => {
       const attendees = parseCalendarAttendees(event.attendees);
