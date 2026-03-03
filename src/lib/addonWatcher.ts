@@ -3,6 +3,9 @@ import type { SyncConfig } from "./types";
 import { resolveSavedVariablesFile } from "./pathResolver";
 import { SyncService } from "./syncService";
 
+const SAVED_VARIABLES_WRITE_STABILITY_MS = 3000;
+const SAVED_VARIABLES_SYNC_DEBOUNCE_MS = 1500;
+
 export type WatchCallbacks = {
   onSyncStart: (detail: string) => void;
   onSyncSuccess: () => void;
@@ -30,7 +33,8 @@ export class AddonWatcher {
     this.watcher = chokidar.watch(resolvedFile, {
       ignoreInitial: true,
       awaitWriteFinish: {
-        stabilityThreshold: 800,
+        // WoW can rewrite large SavedVariables files in bursts during reload/logout.
+        stabilityThreshold: SAVED_VARIABLES_WRITE_STABILITY_MS,
         pollInterval: 100,
       },
     });
@@ -83,7 +87,7 @@ export class AddonWatcher {
       this.runSync(config, callbacks, reason).catch((error) => {
         callbacks.onError(String(error));
       });
-    }, 500);
+    }, SAVED_VARIABLES_SYNC_DEBOUNCE_MS);
   }
 
   private async runSync(
