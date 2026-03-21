@@ -6,7 +6,7 @@ import { SyncService } from "./syncService";
 
 const LUA_FIXTURE = `
 PuschelzDB = {
-  schemaVersion = 14,
+  schemaVersion = 15,
   updatedAt = 1739400000000,
   guildBank = {
     lastScannedAt = 1739400000000,
@@ -16,12 +16,16 @@ PuschelzDB = {
     lastScannedAt = 1739403600000,
     events = {},
   },
+  guildOrders = {
+    lastScannedAt = 1739407200000,
+    orders = {},
+  },
 }
 `;
 
 const LUA_FIXTURE_WITH_ATTENDEES = `
 PuschelzDB = {
-  schemaVersion = 14,
+  schemaVersion = 15,
   updatedAt = 1772571273000,
   guildBank = {
     lastScannedAt = 1739400000000,
@@ -42,6 +46,28 @@ PuschelzDB = {
           { name = "Saphíron-Silvermoon", status = "signedUp" },
           { name = "Tábàluga-Blackhand", status = "tentative" },
         },
+      },
+    },
+  },
+  guildOrders = {
+    lastScannedAt = 1772571273000,
+    orders = {
+      {
+        orderId = 777,
+        itemId = 225646,
+        spellId = 447379,
+        orderType = "guild",
+        orderState = 2,
+        expirationTime = 1773858600000,
+        minQuality = 3,
+        tipAmount = 150000,
+        consortiumCut = 0,
+        isRecraft = false,
+        isFulfillable = true,
+        reagentState = 0,
+        customerName = "Requester-Blackhand",
+        customerNotes = "Need for raid",
+        outputItemHyperlink = "|cff0070dd|Hitem:225646::::::::80:::::|h[Blessed Weapon Grip]|h|r",
       },
     },
   },
@@ -73,7 +99,7 @@ describe("SyncService", () => {
       wowPath: "C:/World of Warcraft",
     });
 
-    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(fetchMock).toHaveBeenCalledTimes(3);
     expect(fetchMock.mock.calls[0]?.[0]).toBe("https://example.convex.site/api/addon-sync");
 
     fs.rmSync(tempDir, { recursive: true, force: true });
@@ -125,7 +151,7 @@ describe("SyncService", () => {
       wowPath: "C:/World of Warcraft",
     });
 
-    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(fetchMock).toHaveBeenCalledTimes(3);
     const [, calendarRequest] = fetchMock.mock.calls[1] ?? [];
     expect(typeof calendarRequest?.body).toBe("string");
     const payload = JSON.parse(String(calendarRequest?.body)) as {
@@ -154,6 +180,72 @@ describe("SyncService", () => {
         ],
       },
     ]);
+
+    fs.rmSync(tempDir, { recursive: true, force: true });
+  });
+
+  it("includes guild orders in the third sync payload", async () => {
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "puschelz-sync-test-"));
+    const filePath = path.join(tempDir, "Puschelz.lua");
+    fs.writeFileSync(filePath, LUA_FIXTURE_WITH_ATTENDEES, "utf8");
+
+    const fetchMock = vi.fn(async () => {
+      return new Response(JSON.stringify({ ok: true }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const service = new SyncService();
+    await service.sync(filePath, {
+      endpointUrl: "https://example.convex.site",
+      apiToken: "pz_test",
+      wowPath: "C:/World of Warcraft",
+    });
+
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+    const [, guildOrdersRequest] = fetchMock.mock.calls[2] ?? [];
+    expect(typeof guildOrdersRequest?.body).toBe("string");
+    const payload = JSON.parse(String(guildOrdersRequest?.body)) as {
+      type: string;
+      payload: {
+        scannedAt: number;
+        orders: Array<{
+          orderId: number;
+          itemId: number;
+          spellId: number;
+          orderType: string;
+        }>;
+      };
+    };
+
+    expect(payload).toEqual({
+      type: "guildOrders",
+      payload: {
+        scannedAt: 1772571273000,
+        orders: [
+          {
+            orderId: 777,
+            itemId: 225646,
+            spellId: 447379,
+            orderType: "guild",
+            orderState: 2,
+            expirationTime: 1773858600000,
+            minQuality: 3,
+            tipAmount: 150000,
+            consortiumCut: 0,
+            isRecraft: false,
+            isFulfillable: true,
+            reagentState: 0,
+            customerName: "Requester-Blackhand",
+            customerNotes: "Need for raid",
+            outputItemHyperlink:
+              "|cff0070dd|Hitem:225646::::::::80:::::|h[Blessed Weapon Grip]|h|r",
+          },
+        ],
+      },
+    });
 
     fs.rmSync(tempDir, { recursive: true, force: true });
   });

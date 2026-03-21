@@ -53,6 +53,13 @@ export class SyncService {
           events: parsed.calendar.events,
         },
       },
+      {
+        type: "guildOrders",
+        payload: {
+          scannedAt: parsed.guildOrders.lastScannedAt,
+          orders: parsed.guildOrders.orders,
+        },
+      },
     ];
 
     for (const payload of payloads) {

@@ -1,6 +1,6 @@
-# Puschelz Desktop Client (V14)
+# Puschelz Desktop Client (V15)
 
-Tray app that watches WoW `SavedVariables/Puschelz.lua` and syncs guild bank + calendar data to the website `/api/addon-sync` endpoint.
+Tray app that watches WoW `SavedVariables/Puschelz.lua` and syncs guild bank, calendar, and guild-order data to the website `/api/addon-sync` endpoint.
 
 ## Features
 
@@ -9,6 +9,7 @@ Tray app that watches WoW `SavedVariables/Puschelz.lua` and syncs guild bank + c
 - Parses Lua SavedVariables and POSTs both payloads:
   - `type: "guildBank"`
   - `type: "calendar"`
+  - `type: "guildOrders"`
 - Uses API token from Puschelz profile page
 - Settings window for endpoint URL, token, and WoW path
 - Status updates in tray and settings window
