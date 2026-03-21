@@ -2,6 +2,7 @@ import { parse } from "luaparse";
 import type {
   CalendarEvent,
   CalendarEventAttendee,
+  GuildOrder,
   GuildBankItem,
   GuildBankTab,
   ParsedPuschelzDb,
@@ -200,6 +201,53 @@ function parseCalendarEvents(value: unknown): CalendarEvent[] {
     });
 }
 
+function parseGuildOrders(value: unknown): GuildOrder[] {
+  const rows = asLuaArray(value);
+  if (!rows) {
+    return [];
+  }
+
+  return rows
+    .filter((order): order is Record<string, unknown> => !!order && typeof order === "object")
+    .map((order) => ({
+      orderId: asNumber(order.orderId),
+      itemId: asNumber(order.itemId),
+      spellId: asNumber(order.spellId),
+      orderType: "guild",
+      orderState: asNumber(order.orderState),
+      expirationTime: asNumber(order.expirationTime),
+      claimEndTime:
+        typeof order.claimEndTime === "number" ? order.claimEndTime : undefined,
+      minQuality:
+        typeof order.minQuality === "number" ? order.minQuality : undefined,
+      tipAmount: typeof order.tipAmount === "number" ? order.tipAmount : undefined,
+      consortiumCut:
+        typeof order.consortiumCut === "number" ? order.consortiumCut : undefined,
+      isRecraft: order.isRecraft === true,
+      isFulfillable: order.isFulfillable === true,
+      reagentState:
+        typeof order.reagentState === "number" ? order.reagentState : undefined,
+      customerGuid:
+        typeof order.customerGuid === "string" ? order.customerGuid : undefined,
+      customerName:
+        typeof order.customerName === "string" ? order.customerName : undefined,
+      crafterGuid:
+        typeof order.crafterGuid === "string" ? order.crafterGuid : undefined,
+      crafterName:
+        typeof order.crafterName === "string" ? order.crafterName : undefined,
+      customerNotes:
+        typeof order.customerNotes === "string" ? order.customerNotes : undefined,
+      outputItemHyperlink:
+        typeof order.outputItemHyperlink === "string"
+          ? order.outputItemHyperlink
+          : undefined,
+      recraftItemHyperlink:
+        typeof order.recraftItemHyperlink === "string"
+          ? order.recraftItemHyperlink
+          : undefined,
+    }));
+}
+
 export function parseSavedVariables(luaSource: string): ParsedPuschelzDb {
   const chunk = parse(luaSource) as LuaNode;
   const body = (chunk.body as LuaNode[]) ?? [];
@@ -220,6 +268,7 @@ export function parseSavedVariables(luaSource: string): ParsedPuschelzDb {
   const root = toValue(init) as Record<string, unknown>;
   const guildBank = (root.guildBank as Record<string, unknown>) ?? {};
   const calendar = (root.calendar as Record<string, unknown>) ?? {};
+  const guildOrders = (root.guildOrders as Record<string, unknown>) ?? {};
 
   return {
     schemaVersion: asNumber(root.schemaVersion),
@@ -232,6 +281,10 @@ export function parseSavedVariables(luaSource: string): ParsedPuschelzDb {
     calendar: {
       lastScannedAt: asNumber(calendar.lastScannedAt),
       events: parseCalendarEvents(calendar.events),
+    },
+    guildOrders: {
+      lastScannedAt: asNumber(guildOrders.lastScannedAt),
+      orders: parseGuildOrders(guildOrders.orders),
     },
   };
 }

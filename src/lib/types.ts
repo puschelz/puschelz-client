@@ -26,6 +26,29 @@ export type CalendarEventAttendee = {
   status: "signedUp" | "tentative";
 };
 
+export type GuildOrder = {
+  orderId: number;
+  itemId: number;
+  spellId: number;
+  orderType: "guild";
+  orderState: number;
+  expirationTime: number;
+  claimEndTime?: number;
+  minQuality?: number;
+  tipAmount?: number;
+  consortiumCut?: number;
+  isRecraft: boolean;
+  isFulfillable: boolean;
+  reagentState?: number;
+  customerGuid?: string;
+  customerName?: string;
+  crafterGuid?: string;
+  crafterName?: string;
+  customerNotes?: string;
+  outputItemHyperlink?: string;
+  recraftItemHyperlink?: string;
+};
+
 export type ParsedPuschelzDb = {
   schemaVersion: number;
   updatedAt: number;
@@ -43,6 +66,10 @@ export type ParsedPuschelzDb = {
   calendar: {
     lastScannedAt: number;
     events: CalendarEvent[];
+  };
+  guildOrders: {
+    lastScannedAt: number;
+    orders: GuildOrder[];
   };
 };
 

@@ -18,7 +18,7 @@ describe("parseSavedVariables", () => {
   it("parses explicitly indexed Lua tables for calendar events and attendees", () => {
     const source = `
 PuschelzDB = {
-  ["schemaVersion"] = 14,
+  ["schemaVersion"] = 15,
   ["updatedAt"] = 1771778730000,
   ["guildBank"] = {
     ["lastScannedAt"] = 1771778727000,
@@ -67,6 +67,28 @@ PuschelzDB = {
       },
     },
   },
+  ["guildOrders"] = {
+    ["lastScannedAt"] = 1771778727000,
+    ["orders"] = {
+      [1] = {
+        ["orderId"] = 777,
+        ["itemId"] = 225646,
+        ["spellId"] = 447379,
+        ["orderType"] = "guild",
+        ["orderState"] = 2,
+        ["expirationTime"] = 1771992000000,
+        ["minQuality"] = 3,
+        ["tipAmount"] = 150000,
+        ["consortiumCut"] = 0,
+        ["isRecraft"] = false,
+        ["isFulfillable"] = true,
+        ["reagentState"] = 0,
+        ["customerName"] = "Requester-Blackhand",
+        ["customerNotes"] = "Need for raid",
+        ["outputItemHyperlink"] = "|cff0070dd|Hitem:225646::::::::80:::::|h[Blessed Weapon Grip]|h|r",
+      },
+    },
+  },
 }
 `;
 
@@ -104,6 +126,26 @@ PuschelzDB = {
         eventType: "world",
         startTime: 1769572800000,
         endTime: 1771992000000,
+      },
+    ]);
+    expect(parsed.guildOrders.orders).toEqual([
+      {
+        orderId: 777,
+        itemId: 225646,
+        spellId: 447379,
+        orderType: "guild",
+        orderState: 2,
+        expirationTime: 1771992000000,
+        minQuality: 3,
+        tipAmount: 150000,
+        consortiumCut: 0,
+        isRecraft: false,
+        isFulfillable: true,
+        reagentState: 0,
+        customerName: "Requester-Blackhand",
+        customerNotes: "Need for raid",
+        outputItemHyperlink:
+          "|cff0070dd|Hitem:225646::::::::80:::::|h[Blessed Weapon Grip]|h|r",
       },
     ]);
   });
