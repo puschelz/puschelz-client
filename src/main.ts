@@ -307,43 +307,79 @@ function configureAutoUpdates(): void {
   });
 
   autoUpdater.on("checking-for-update", () => {
+    if (updateStatus.restartRequired) {
+      setUpdateStatus({
+        enabled: true,
+        state: "downloaded",
+        detail: updateStatus.detail,
+        checkedAt: Date.now(),
+      });
+      return;
+    }
+
     setUpdateStatus({
       enabled: true,
       state: "checking",
       detail: "Checking for updates...",
       checkedAt: Date.now(),
-      restartRequired: false,
     });
   });
 
   autoUpdater.on("update-available", () => {
+    if (updateStatus.restartRequired) {
+      setUpdateStatus({
+        enabled: true,
+        state: "downloaded",
+        detail: updateStatus.detail,
+        checkedAt: Date.now(),
+      });
+      return;
+    }
+
     setUpdateStatus({
       enabled: true,
       state: "downloading",
       detail: "A new update is downloading in the background.",
       checkedAt: Date.now(),
-      restartRequired: false,
     });
   });
 
   autoUpdater.on("update-not-available", () => {
+    if (updateStatus.restartRequired) {
+      setUpdateStatus({
+        enabled: true,
+        state: "downloaded",
+        detail: updateStatus.detail,
+        checkedAt: Date.now(),
+      });
+      return;
+    }
+
     setUpdateStatus({
       enabled: true,
       availableVersion: null,
       state: "idle",
       detail: "You are up to date.",
       checkedAt: Date.now(),
-      restartRequired: false,
     });
   });
 
   autoUpdater.on("error", (error) => {
+    if (updateStatus.restartRequired) {
+      setUpdateStatus({
+        enabled: true,
+        state: "downloaded",
+        detail: updateStatus.detail,
+        checkedAt: Date.now(),
+      });
+      return;
+    }
+
     setUpdateStatus({
       enabled: true,
       state: "error",
       detail: `Update check failed: ${error instanceof Error ? error.message : String(error)}`,
       checkedAt: Date.now(),
-      restartRequired: false,
     });
   });
 
