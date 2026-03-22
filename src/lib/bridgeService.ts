@@ -122,18 +122,26 @@ export class BridgeService {
     }
 
     const bridgePath = path.join(path.dirname(savedVariablesFile), "PuschelzBridge.lua");
+    const renderedBridge = renderBridgeLua(snapshot);
     if (
       this.lastSnapshotVersion === snapshot.snapshotVersion &&
       this.lastWrittenPath === bridgePath
     ) {
-      return {
-        filePath: bridgePath,
-        snapshotVersion: snapshot.snapshotVersion,
+      try {
+        const existingBridge = await fs.readFile(bridgePath, "utf8");
+        if (existingBridge === renderedBridge) {
+          return {
+            filePath: bridgePath,
+            snapshotVersion: snapshot.snapshotVersion,
+          };
+        }
+      } catch {
+        // Missing or unreadable bridge files should be rewritten from the fetched snapshot.
       };
     }
 
     await fs.mkdir(path.dirname(bridgePath), { recursive: true });
-    await fs.writeFile(bridgePath, renderBridgeLua(snapshot), "utf8");
+    await fs.writeFile(bridgePath, renderedBridge, "utf8");
     this.lastSnapshotVersion = snapshot.snapshotVersion;
     this.lastWrittenPath = bridgePath;
     return {

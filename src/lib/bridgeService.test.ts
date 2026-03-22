@@ -132,7 +132,7 @@ describe("BridgeService", () => {
     fs.rmSync(tempDir, { recursive: true, force: true });
   });
 
-  it("skips rewriting when snapshotVersion is unchanged", async () => {
+  it("rewrites when the on-disk bridge file diverges even if snapshotVersion is unchanged", async () => {
     const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "puschelz-bridge-test-"));
     const filePath = path.join(tempDir, "Puschelz.lua");
     fs.writeFileSync(filePath, LUA_FIXTURE, "utf8");
@@ -172,7 +172,8 @@ describe("BridgeService", () => {
       wowPath: "/unused/by-mock",
     });
 
-    expect(fs.readFileSync(bridgePath, "utf8")).toContain("-- sentinel");
+    expect(fs.readFileSync(bridgePath, "utf8")).not.toContain("-- sentinel");
+    expect(fs.readFileSync(bridgePath, "utf8")).toContain("snapshotVersion = 7");
 
     fs.rmSync(tempDir, { recursive: true, force: true });
   });
