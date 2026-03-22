@@ -177,6 +177,53 @@ describe("BridgeService", () => {
     fs.rmSync(tempDir, { recursive: true, force: true });
   });
 
+  it("rewrites the bridge file when the WoW path changes even if snapshotVersion is unchanged", async () => {
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "puschelz-bridge-test-"));
+    const firstDir = path.join(tempDir, "First");
+    const secondDir = path.join(tempDir, "Second");
+    const firstFilePath = path.join(firstDir, "Puschelz.lua");
+    const secondFilePath = path.join(secondDir, "Puschelz.lua");
+    fs.mkdirSync(firstDir, { recursive: true });
+    fs.mkdirSync(secondDir, { recursive: true });
+    fs.writeFileSync(firstFilePath, LUA_FIXTURE, "utf8");
+    fs.writeFileSync(secondFilePath, LUA_FIXTURE, "utf8");
+
+    vi.mocked(resolveSavedVariablesFile)
+      .mockResolvedValueOnce(firstFilePath)
+      .mockResolvedValueOnce(secondFilePath);
+
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => {
+        return new Response(JSON.stringify(makeSnapshot(7)), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        });
+      })
+    );
+
+    const service = new BridgeService();
+    await service.refresh({
+      endpointUrl: "https://puschelz.de",
+      apiToken: "pz_test",
+      wowPath: "/unused/by-mock",
+    });
+    await service.refresh({
+      endpointUrl: "https://puschelz.de",
+      apiToken: "pz_test",
+      wowPath: "/unused/by-mock",
+    });
+
+    expect(fs.readFileSync(path.join(firstDir, "PuschelzBridge.lua"), "utf8")).toContain(
+      "snapshotVersion = 7"
+    );
+    expect(fs.readFileSync(path.join(secondDir, "PuschelzBridge.lua"), "utf8")).toContain(
+      "snapshotVersion = 7"
+    );
+
+    fs.rmSync(tempDir, { recursive: true, force: true });
+  });
+
   it("returns an actionable error for HTTP failures", async () => {
     vi.mocked(resolveSavedVariablesFile).mockResolvedValue("/tmp/Puschelz.lua");
     vi.stubGlobal(

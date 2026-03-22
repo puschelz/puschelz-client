@@ -200,7 +200,7 @@ function stopBridgeRefreshLoop(): void {
 function ensureBridgeRefreshLoop(): void {
   stopBridgeRefreshLoop();
   bridgeRefreshTimer = setInterval(() => {
-    void refreshBridgeData({ skipIfBusy: true }).catch(() => {});
+    void refreshBridgeData({ skipIfBusy: true, suppressErrorStatus: true }).catch(() => {});
   }, BRIDGE_REFRESH_INTERVAL_MS);
 }
 

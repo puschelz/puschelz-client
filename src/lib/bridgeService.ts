@@ -80,6 +80,7 @@ ${requestLines.join("\n")}
 
 export class BridgeService {
   private lastSnapshotVersion: number | null = null;
+  private lastWrittenPath: string | null = null;
 
   async refresh(config: SyncConfig): Promise<{ filePath: string; snapshotVersion: number } | null> {
     if (!config.endpointUrl.trim() || !config.apiToken.trim() || !config.wowPath.trim()) {
@@ -120,17 +121,21 @@ export class BridgeService {
       throw new Error("Bridge refresh returned an invalid payload");
     }
 
-    if (this.lastSnapshotVersion === snapshot.snapshotVersion) {
+    const bridgePath = path.join(path.dirname(savedVariablesFile), "PuschelzBridge.lua");
+    if (
+      this.lastSnapshotVersion === snapshot.snapshotVersion &&
+      this.lastWrittenPath === bridgePath
+    ) {
       return {
-        filePath: path.join(path.dirname(savedVariablesFile), "PuschelzBridge.lua"),
+        filePath: bridgePath,
         snapshotVersion: snapshot.snapshotVersion,
       };
     }
 
-    const bridgePath = path.join(path.dirname(savedVariablesFile), "PuschelzBridge.lua");
     await fs.mkdir(path.dirname(bridgePath), { recursive: true });
     await fs.writeFile(bridgePath, renderBridgeLua(snapshot), "utf8");
     this.lastSnapshotVersion = snapshot.snapshotVersion;
+    this.lastWrittenPath = bridgePath;
     return {
       filePath: bridgePath,
       snapshotVersion: snapshot.snapshotVersion,
