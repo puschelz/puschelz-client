@@ -79,6 +79,34 @@ export type SyncConfig = {
   wowPath: string;
 };
 
+export type BridgeRecipe = {
+  spellId: number;
+  itemId: number;
+  crafterCount: number;
+  matchedCharacterKeys: string[];
+};
+
+export type BridgeOpenRequest = {
+  requestId: string;
+  status: "pending_web" | "open_ingame";
+  requesterCharacterName: string;
+  requesterRealmName: string;
+  spellId: number;
+  itemId: number;
+  itemName: string;
+  quality?: number;
+  note?: string;
+  expiresAt: number;
+  matchedCharacterKeys: string[];
+};
+
+export type BridgeSnapshot = {
+  snapshotVersion: number;
+  generatedAt: number;
+  recipes: BridgeRecipe[];
+  openRequests: BridgeOpenRequest[];
+};
+
 export type SyncStatus = {
   state: "idle" | "watching" | "syncing" | "error";
   detail: string;
