@@ -1,0 +1,144 @@
+import fs from "node:fs/promises";
+import path from "node:path";
+import { resolveSavedVariablesFile } from "./pathResolver";
+import type { BridgeSnapshot, SyncConfig } from "./types";
+
+const BRIDGE_SCHEMA_VERSION = 1;
+const BRIDGE_FETCH_TIMEOUT_MS = 10_000;
+
+function escapeLuaString(value: string): string {
+  return value
+    .replace(/\\/g, "\\\\")
+    .replace(/"/g, '\\"')
+    .replace(/\n/g, "\\n")
+    .replace(/\r/g, "\\r");
+}
+
+function renderLuaString(value: string): string {
+  return `"${escapeLuaString(value)}"`;
+}
+
+function renderLuaStringArray(values: string[]): string {
+  if (values.length === 0) {
+    return "{}";
+  }
+  return `{ ${values.map((value) => renderLuaString(value)).join(", ")} }`;
+}
+
+function resolveBridgeUrl(endpointUrl: string): string {
+  const trimmed = endpointUrl.trim().replace(/\/+$/, "");
+  if (/\/api\/addon-sync$/i.test(trimmed)) {
+    return trimmed.replace(/\/api\/addon-sync$/i, "/api/addon-bridge");
+  }
+  if (/\/api\/addon-bridge$/i.test(trimmed)) {
+    return trimmed;
+  }
+  return `${trimmed}/api/addon-bridge`;
+}
+
+function renderBridgeLua(snapshot: BridgeSnapshot): string {
+  const recipeLines = snapshot.recipes
+    .sort((left, right) => {
+      if (left.spellId !== right.spellId) return left.spellId - right.spellId;
+      return left.itemId - right.itemId;
+    })
+    .map(
+      (recipe) =>
+        `    ["${recipe.spellId}:${recipe.itemId}"] = { crafterCount = ${recipe.crafterCount}, matchedCharacterKeys = ${renderLuaStringArray(recipe.matchedCharacterKeys)} },`
+    );
+  const requestLines = snapshot.openRequests
+    .map((request) => {
+      const fields = [
+        `requestId = ${renderLuaString(request.requestId)}`,
+        `status = ${renderLuaString(request.status)}`,
+        `requesterCharacterName = ${renderLuaString(request.requesterCharacterName)}`,
+        `requesterRealmName = ${renderLuaString(request.requesterRealmName)}`,
+        `spellId = ${request.spellId}`,
+        `itemId = ${request.itemId}`,
+        `itemName = ${renderLuaString(request.itemName)}`,
+        typeof request.quality === "number" ? `quality = ${request.quality}` : null,
+        request.note ? `note = ${renderLuaString(request.note)}` : null,
+        `expiresAt = ${request.expiresAt}`,
+        `matchedCharacterKeys = ${renderLuaStringArray(request.matchedCharacterKeys)}`,
+      ].filter((value): value is string => value !== null);
+      return `    { ${fields.join(", ")} },`;
+    });
+
+  return `PuschelzBridgeDB = {
+  schemaVersion = ${BRIDGE_SCHEMA_VERSION},
+  snapshotVersion = ${snapshot.snapshotVersion},
+  generatedAt = ${snapshot.generatedAt},
+  recipesByKey = {
+${recipeLines.join("\n")}
+  },
+  openRequests = {
+${requestLines.join("\n")}
+  },
+}
+`;
+}
+
+export class BridgeService {
+  private lastSnapshotVersion: number | null = null;
+  private lastWrittenPath: string | null = null;
+
+  async refresh(config: SyncConfig): Promise<{ filePath: string; snapshotVersion: number } | null> {
+    if (!config.endpointUrl.trim() || !config.apiToken.trim() || !config.wowPath.trim()) {
+      return null;
+    }
+
+    const savedVariablesFile = await resolveSavedVariablesFile(config.wowPath);
+    if (!savedVariablesFile) {
+      throw new Error("Could not locate Puschelz.lua under the configured WoW path");
+    }
+
+    const response = await fetch(resolveBridgeUrl(config.endpointUrl), {
+      method: "GET",
+      headers: {
+        Authorization: `Bearer ${config.apiToken}`,
+      },
+      signal: AbortSignal.timeout(BRIDGE_FETCH_TIMEOUT_MS),
+    });
+    if (!response.ok) {
+      const body = await response.text();
+      throw new Error(`Bridge refresh failed (${response.status}): ${body}`);
+    }
+
+    let payload: unknown;
+    try {
+      payload = await response.json();
+    } catch {
+      throw new Error("Bridge refresh returned invalid JSON");
+    }
+
+    const snapshot = payload as BridgeSnapshot;
+    if (
+      typeof snapshot.snapshotVersion !== "number" ||
+      typeof snapshot.generatedAt !== "number" ||
+      !Array.isArray(snapshot.recipes) ||
+      !Array.isArray(snapshot.openRequests)
+    ) {
+      throw new Error("Bridge refresh returned an invalid payload");
+    }
+
+    const bridgePath = path.join(path.dirname(savedVariablesFile), "PuschelzBridge.lua");
+    if (
+      this.lastSnapshotVersion === snapshot.snapshotVersion &&
+      this.lastWrittenPath === bridgePath
+    ) {
+      return {
+        filePath: bridgePath,
+        snapshotVersion: snapshot.snapshotVersion,
+      };
+    }
+
+    await fs.mkdir(path.dirname(bridgePath), { recursive: true });
+    await fs.writeFile(bridgePath, renderBridgeLua(snapshot), "utf8");
+    this.lastSnapshotVersion = snapshot.snapshotVersion;
+    this.lastWrittenPath = bridgePath;
+    return {
+      filePath: bridgePath,
+      snapshotVersion: snapshot.snapshotVersion,
+    };
+  }
+}

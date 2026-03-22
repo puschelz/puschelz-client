@@ -2,15 +2,20 @@ import path from "node:path";
 import { app, BrowserWindow, dialog, ipcMain, Menu, Tray, nativeImage } from "electron";
 import type { OpenDialogOptions } from "electron";
 import { AddonWatcher } from "./lib/addonWatcher";
+import { BridgeService } from "./lib/bridgeService";
 import { ConfigStore } from "./lib/configStore";
 import type { SyncConfig, SyncStatus } from "./lib/types";
 import { detectWowInstallPath } from "./lib/wowPathDetection";
 
 const configStore = new ConfigStore();
 const addonWatcher = new AddonWatcher();
+const bridgeService = new BridgeService();
+const BRIDGE_REFRESH_INTERVAL_MS = 5 * 60 * 1000;
 
 let tray: Tray | null = null;
 let settingsWindow: BrowserWindow | null = null;
+let bridgeRefreshTimer: NodeJS.Timeout | null = null;
+let bridgeRefreshInFlight: Promise<void> | null = null;
 
 let status: SyncStatus = {
   state: "idle",
@@ -117,6 +122,7 @@ function refreshTrayMenu(): void {
     {
       label: "Quit",
       click: () => {
+        stopBridgeRefreshLoop();
         void addonWatcher.stop().finally(() => app.quit());
       },
     },
@@ -146,11 +152,64 @@ function getCallbacks() {
   };
 }
 
+async function refreshBridgeData(options?: {
+  skipIfBusy?: boolean;
+  suppressErrorStatus?: boolean;
+}): Promise<void> {
+  if (bridgeRefreshInFlight) {
+    if (options?.skipIfBusy) {
+      return;
+    }
+    return await bridgeRefreshInFlight;
+  }
+
+  bridgeRefreshInFlight = (async () => {
+    const config = getConfig();
+    const missing = listMissingConfig(config);
+    if (missing.length > 0) {
+      return;
+    }
+
+    try {
+      await bridgeService.refresh(config);
+    } catch (error) {
+      if (!options?.suppressErrorStatus) {
+        setStatus({
+          state: "error",
+          detail: error instanceof Error ? error.message : String(error),
+        });
+      }
+      throw error;
+    }
+  })();
+
+  try {
+    await bridgeRefreshInFlight;
+  } finally {
+    bridgeRefreshInFlight = null;
+  }
+}
+
+function stopBridgeRefreshLoop(): void {
+  if (bridgeRefreshTimer) {
+    clearInterval(bridgeRefreshTimer);
+    bridgeRefreshTimer = null;
+  }
+}
+
+function ensureBridgeRefreshLoop(): void {
+  stopBridgeRefreshLoop();
+  bridgeRefreshTimer = setInterval(() => {
+    void refreshBridgeData({ skipIfBusy: true, suppressErrorStatus: true }).catch(() => {});
+  }, BRIDGE_REFRESH_INTERVAL_MS);
+}
+
 async function startWatcher(): Promise<ActionResult> {
   const config = getConfig();
   const missing = listMissingConfig(config);
   if (missing.length > 0) {
     const missingText = missing.join(", ");
+    stopBridgeRefreshLoop();
     setStatus({
       state: "idle",
       detail: `Missing required settings: ${missingText}`,
@@ -164,11 +223,28 @@ async function startWatcher(): Promise<ActionResult> {
 
   try {
     await addonWatcher.start(config, getCallbacks());
+    let bridgeRefreshWarning: string | null = null;
+    try {
+      await refreshBridgeData({ suppressErrorStatus: true });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      bridgeRefreshWarning = `Watching SavedVariables (bridge refresh will retry: ${message})`;
+    }
+    ensureBridgeRefreshLoop();
+    if (bridgeRefreshWarning) {
+      setStatus({
+        state: "watching",
+        detail: bridgeRefreshWarning,
+      });
+    }
     return {
       ok: true,
-      message: "Saved and watcher started successfully.",
+      message: bridgeRefreshWarning
+        ? "Saved and watcher started successfully. Bridge refresh will retry automatically."
+        : "Saved and watcher started successfully.",
     };
   } catch (error) {
+    stopBridgeRefreshLoop();
     const message = error instanceof Error ? error.message : String(error);
     setStatus({
       state: "error",
@@ -200,9 +276,16 @@ async function runManualSync(): Promise<ActionResult> {
 
   try {
     await addonWatcher.syncNow(config, getCallbacks());
+    let bridgeRefreshWarning: string | null = null;
+    try {
+      await refreshBridgeData({ suppressErrorStatus: true });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      bridgeRefreshWarning = `Manual sync completed, but bridge refresh will retry automatically: ${message}`;
+    }
     return {
       ok: true,
-      message: "Manual sync completed successfully.",
+      message: bridgeRefreshWarning ?? "Manual sync completed successfully.",
     };
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
@@ -293,5 +376,6 @@ app.whenReady().then(async () => {
 app.on("window-all-closed", () => {});
 
 app.on("before-quit", () => {
+  stopBridgeRefreshLoop();
   void addonWatcher.stop();
 });
