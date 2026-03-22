@@ -276,10 +276,16 @@ async function runManualSync(): Promise<ActionResult> {
 
   try {
     await addonWatcher.syncNow(config, getCallbacks());
-    await refreshBridgeData();
+    let bridgeRefreshWarning: string | null = null;
+    try {
+      await refreshBridgeData({ suppressErrorStatus: true });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      bridgeRefreshWarning = `Manual sync completed, but bridge refresh will retry automatically: ${message}`;
+    }
     return {
       ok: true,
-      message: "Manual sync completed successfully.",
+      message: bridgeRefreshWarning ?? "Manual sync completed successfully.",
     };
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
