@@ -152,7 +152,10 @@ function getCallbacks() {
   };
 }
 
-async function refreshBridgeData(options?: { skipIfBusy?: boolean }): Promise<void> {
+async function refreshBridgeData(options?: {
+  skipIfBusy?: boolean;
+  suppressErrorStatus?: boolean;
+}): Promise<void> {
   if (bridgeRefreshInFlight) {
     if (options?.skipIfBusy) {
       return;
@@ -170,10 +173,12 @@ async function refreshBridgeData(options?: { skipIfBusy?: boolean }): Promise<vo
     try {
       await bridgeService.refresh(config);
     } catch (error) {
-      setStatus({
-        state: "error",
-        detail: error instanceof Error ? error.message : String(error),
-      });
+      if (!options?.suppressErrorStatus) {
+        setStatus({
+          state: "error",
+          detail: error instanceof Error ? error.message : String(error),
+        });
+      }
       throw error;
     }
   })();
@@ -218,11 +223,25 @@ async function startWatcher(): Promise<ActionResult> {
 
   try {
     await addonWatcher.start(config, getCallbacks());
-    await refreshBridgeData();
+    let bridgeRefreshWarning: string | null = null;
+    try {
+      await refreshBridgeData({ suppressErrorStatus: true });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      bridgeRefreshWarning = `Watching SavedVariables (bridge refresh will retry: ${message})`;
+    }
     ensureBridgeRefreshLoop();
+    if (bridgeRefreshWarning) {
+      setStatus({
+        state: "watching",
+        detail: bridgeRefreshWarning,
+      });
+    }
     return {
       ok: true,
-      message: "Saved and watcher started successfully.",
+      message: bridgeRefreshWarning
+        ? "Saved and watcher started successfully. Bridge refresh will retry automatically."
+        : "Saved and watcher started successfully.",
     };
   } catch (error) {
     stopBridgeRefreshLoop();
