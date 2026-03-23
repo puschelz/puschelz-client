@@ -113,3 +113,28 @@ export type SyncStatus = {
   lastSyncedAt: number | null;
   watchedFile: string | null;
 };
+
+export type UpdateState =
+  | "unsupported"
+  | "idle"
+  | "checking"
+  | "available"
+  | "downloading"
+  | "downloaded"
+  | "error";
+
+export type UpdateStatus = {
+  enabled: boolean;
+  currentVersion: string;
+  availableVersion: string | null;
+  state: UpdateState;
+  detail: string;
+  checkedAt: number | null;
+  restartRequired: boolean;
+};
+
+export type RendererState = {
+  config: SyncConfig;
+  status: SyncStatus;
+  updateStatus: UpdateStatus;
+};
