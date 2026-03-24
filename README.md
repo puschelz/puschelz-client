@@ -1,6 +1,6 @@
 # Puschelz Desktop Client (V15)
 
-Tray app that watches WoW `SavedVariables/Puschelz.lua` and syncs guild bank, calendar, and guild-order data to the website `/api/addon-sync` endpoint.
+Tray app that watches WoW `SavedVariables/Puschelz.lua`, syncs guild bank, calendar, and guild-order data to `/api/addon-sync`, and refreshes the companion bridge file from `/api/addon-bridge`.
 
 ## Features
 
@@ -11,6 +11,7 @@ Tray app that watches WoW `SavedVariables/Puschelz.lua` and syncs guild bank, ca
   - `type: "calendar"`
   - `type: "guildOrders"`
 - Uses API token from Puschelz profile page
+- Writes `PuschelzBridge.lua` next to `Puschelz.lua` with craft-request bridge data and required-addon definitions
 - Settings window for endpoint URL, token, and WoW path
 - Status updates in tray and settings window
 

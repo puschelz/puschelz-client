@@ -100,11 +100,20 @@ export type BridgeOpenRequest = {
   matchedCharacterKeys: string[];
 };
 
+export type BridgeRequiredAddon = {
+  addonId: string;
+  name: string;
+  description?: string;
+  matchFolderNames: string[];
+};
+
 export type BridgeSnapshot = {
   snapshotVersion: number;
+  requiredAddonsVersion: number;
   generatedAt: number;
   recipes: BridgeRecipe[];
   openRequests: BridgeOpenRequest[];
+  requiredAddons: BridgeRequiredAddon[];
 };
 
 export type SyncStatus = {

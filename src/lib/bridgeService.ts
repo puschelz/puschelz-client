@@ -1,7 +1,7 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import { resolveSavedVariablesFile } from "./pathResolver";
-import type { BridgeSnapshot, SyncConfig } from "./types";
+import type { BridgeRequiredAddon, BridgeSnapshot, SyncConfig } from "./types";
 
 const BRIDGE_SCHEMA_VERSION = 1;
 const BRIDGE_FETCH_TIMEOUT_MS = 10_000;
@@ -23,6 +23,17 @@ function renderLuaStringArray(values: string[]): string {
     return "{}";
   }
   return `{ ${values.map((value) => renderLuaString(value)).join(", ")} }`;
+}
+
+function renderRequiredAddon(addon: BridgeRequiredAddon): string {
+  const fields = [
+    `addonId = ${renderLuaString(addon.addonId)}`,
+    `name = ${renderLuaString(addon.name)}`,
+    addon.description ? `description = ${renderLuaString(addon.description)}` : null,
+    `matchFolderNames = ${renderLuaStringArray(addon.matchFolderNames)}`,
+  ].filter((value): value is string => value !== null);
+
+  return `    { ${fields.join(", ")} },`;
 }
 
 function resolveBridgeUrl(endpointUrl: string): string {
@@ -63,10 +74,15 @@ function renderBridgeLua(snapshot: BridgeSnapshot): string {
       ].filter((value): value is string => value !== null);
       return `    { ${fields.join(", ")} },`;
     });
+  const requiredAddonLines = snapshot.requiredAddons
+    .slice()
+    .sort((left, right) => left.name.localeCompare(right.name, undefined, { sensitivity: "base" }))
+    .map((addon) => renderRequiredAddon(addon));
 
   return `PuschelzBridgeDB = {
   schemaVersion = ${BRIDGE_SCHEMA_VERSION},
   snapshotVersion = ${snapshot.snapshotVersion},
+  requiredAddonsVersion = ${snapshot.requiredAddonsVersion},
   generatedAt = ${snapshot.generatedAt},
   recipesByKey = {
 ${recipeLines.join("\n")}
@@ -74,12 +90,15 @@ ${recipeLines.join("\n")}
   openRequests = {
 ${requestLines.join("\n")}
   },
+  requiredAddons = {
+${requiredAddonLines.join("\n")}
+  },
 }
 `;
 }
 
 export class BridgeService {
-  private lastSnapshotVersion: number | null = null;
+  private lastBridgeVersionKey: string | null = null;
   private lastWrittenPath: string | null = null;
 
   async refresh(config: SyncConfig): Promise<{ filePath: string; snapshotVersion: number } | null> {
@@ -111,20 +130,43 @@ export class BridgeService {
       throw new Error("Bridge refresh returned invalid JSON");
     }
 
-    const snapshot = payload as BridgeSnapshot;
+    const rawSnapshot = payload as Partial<BridgeSnapshot>;
     if (
-      typeof snapshot.snapshotVersion !== "number" ||
-      typeof snapshot.generatedAt !== "number" ||
-      !Array.isArray(snapshot.recipes) ||
-      !Array.isArray(snapshot.openRequests)
+      typeof rawSnapshot.snapshotVersion !== "number" ||
+      typeof rawSnapshot.generatedAt !== "number" ||
+      !Array.isArray(rawSnapshot.recipes) ||
+      !Array.isArray(rawSnapshot.openRequests)
     ) {
       throw new Error("Bridge refresh returned an invalid payload");
     }
 
+    if (
+      rawSnapshot.requiredAddonsVersion !== undefined &&
+      typeof rawSnapshot.requiredAddonsVersion !== "number"
+    ) {
+      throw new Error("Bridge refresh returned an invalid payload");
+    }
+    if (
+      rawSnapshot.requiredAddons !== undefined &&
+      !Array.isArray(rawSnapshot.requiredAddons)
+    ) {
+      throw new Error("Bridge refresh returned an invalid payload");
+    }
+
+    const snapshot: BridgeSnapshot = {
+      snapshotVersion: rawSnapshot.snapshotVersion,
+      requiredAddonsVersion: rawSnapshot.requiredAddonsVersion ?? 0,
+      generatedAt: rawSnapshot.generatedAt,
+      recipes: rawSnapshot.recipes,
+      openRequests: rawSnapshot.openRequests,
+      requiredAddons: rawSnapshot.requiredAddons ?? [],
+    };
+
     const bridgePath = path.join(path.dirname(savedVariablesFile), "PuschelzBridge.lua");
     const renderedBridge = renderBridgeLua(snapshot);
+    const bridgeVersionKey = `${snapshot.snapshotVersion}:${snapshot.requiredAddonsVersion}`;
     if (
-      this.lastSnapshotVersion === snapshot.snapshotVersion &&
+      this.lastBridgeVersionKey === bridgeVersionKey &&
       this.lastWrittenPath === bridgePath
     ) {
       try {
@@ -142,7 +184,7 @@ export class BridgeService {
 
     await fs.mkdir(path.dirname(bridgePath), { recursive: true });
     await fs.writeFile(bridgePath, renderedBridge, "utf8");
-    this.lastSnapshotVersion = snapshot.snapshotVersion;
+    this.lastBridgeVersionKey = bridgeVersionKey;
     this.lastWrittenPath = bridgePath;
     return {
       filePath: bridgePath,
