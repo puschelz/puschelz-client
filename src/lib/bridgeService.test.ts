@@ -31,6 +31,7 @@ PuschelzDB = {
 function makeSnapshot(snapshotVersion: number) {
   return {
     snapshotVersion,
+    requiredAddonsVersion: snapshotVersion + 100,
     generatedAt: 1773000000000,
     recipes: [
       {
@@ -52,6 +53,14 @@ function makeSnapshot(snapshotVersion: number) {
         note: "Need for raid",
         expiresAt: 1773003600000,
         matchedCharacterKeys: ["treatisecrafter-blackhand"],
+      },
+    ],
+    requiredAddons: [
+      {
+        addonId: "abc123",
+        name: "WeakAuras",
+        description: "Aura helper",
+        matchFolderNames: ["WeakAuras", "WeakAurasOptions"],
       },
     ],
   };
@@ -95,6 +104,9 @@ describe("BridgeService", () => {
     expect(bridgeSource).toContain("PuschelzBridgeDB = {");
     expect(bridgeSource).toContain('["447379:225646"]');
     expect(bridgeSource).toContain('requestId = "j57abc"');
+    expect(bridgeSource).toContain("requiredAddonsVersion = 142");
+    expect(bridgeSource).toContain('name = "WeakAuras"');
+    expect(bridgeSource).toContain('matchFolderNames = { "WeakAuras", "WeakAurasOptions" }');
 
     fs.rmSync(tempDir, { recursive: true, force: true });
   });
@@ -144,9 +156,11 @@ describe("BridgeService", () => {
         return new Response(
           JSON.stringify({
             snapshotVersion: 7,
+            requiredAddonsVersion: 17,
             generatedAt: 1773000000000,
             recipes: [],
             openRequests: [],
+            requiredAddons: [],
           }),
           {
             status: 200,
@@ -225,6 +239,128 @@ describe("BridgeService", () => {
     fs.rmSync(tempDir, { recursive: true, force: true });
   });
 
+  it("rewrites the bridge file when requiredAddonsVersion changes even if snapshotVersion is unchanged", async () => {
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "puschelz-bridge-test-"));
+    const filePath = path.join(tempDir, "Puschelz.lua");
+    fs.writeFileSync(filePath, LUA_FIXTURE, "utf8");
+    vi.mocked(resolveSavedVariablesFile).mockResolvedValue(filePath);
+
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => {
+        return new Response(
+          JSON.stringify({
+            snapshotVersion: 21,
+            requiredAddonsVersion: 200,
+            generatedAt: 1773000000000,
+            recipes: [],
+            openRequests: [],
+            requiredAddons: [
+              {
+                addonId: "wa",
+                name: "WeakAuras",
+                matchFolderNames: ["WeakAuras"],
+              },
+            ],
+          }),
+          {
+            status: 200,
+            headers: { "Content-Type": "application/json" },
+          }
+        );
+      })
+    );
+
+    const service = new BridgeService();
+    await service.refresh({
+      endpointUrl: "https://puschelz.de",
+      apiToken: "pz_test",
+      wowPath: "/unused/by-mock",
+    });
+    const bridgePath = path.join(tempDir, "PuschelzBridge.lua");
+    expect(fs.readFileSync(bridgePath, "utf8")).toContain("requiredAddonsVersion = 200");
+
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => {
+        return new Response(
+          JSON.stringify({
+            snapshotVersion: 21,
+            requiredAddonsVersion: 201,
+            generatedAt: 1773000000000,
+            recipes: [],
+            openRequests: [],
+            requiredAddons: [
+              {
+                addonId: "wa",
+                name: "WeakAuras",
+                matchFolderNames: ["WeakAuras", "WeakAurasOptions"],
+              },
+            ],
+          }),
+          {
+            status: 200,
+            headers: { "Content-Type": "application/json" },
+          }
+        );
+      })
+    );
+
+    await service.refresh({
+      endpointUrl: "https://puschelz.de",
+      apiToken: "pz_test",
+      wowPath: "/unused/by-mock",
+    });
+
+    const bridgeSource = fs.readFileSync(bridgePath, "utf8");
+    expect(bridgeSource).toContain("requiredAddonsVersion = 201");
+    expect(bridgeSource).toContain('matchFolderNames = { "WeakAuras", "WeakAurasOptions" }');
+
+    fs.rmSync(tempDir, { recursive: true, force: true });
+  });
+
+  it("accepts legacy bridge payloads without required addon fields", async () => {
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "puschelz-bridge-test-"));
+    const filePath = path.join(tempDir, "Puschelz.lua");
+    fs.writeFileSync(filePath, LUA_FIXTURE, "utf8");
+    vi.mocked(resolveSavedVariablesFile).mockResolvedValue(filePath);
+
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => {
+        return new Response(
+          JSON.stringify({
+            snapshotVersion: 55,
+            generatedAt: 1773000000000,
+            recipes: [],
+            openRequests: [],
+          }),
+          {
+            status: 200,
+            headers: { "Content-Type": "application/json" },
+          }
+        );
+      })
+    );
+
+    const service = new BridgeService();
+    const result = await service.refresh({
+      endpointUrl: "https://puschelz.de",
+      apiToken: "pz_test",
+      wowPath: "/unused/by-mock",
+    });
+
+    expect(result).toEqual({
+      filePath: path.join(tempDir, "PuschelzBridge.lua"),
+      snapshotVersion: 55,
+    });
+    const bridgeSource = fs.readFileSync(path.join(tempDir, "PuschelzBridge.lua"), "utf8");
+    expect(bridgeSource).toContain("requiredAddonsVersion = 0");
+    expect(bridgeSource).toContain("requiredAddons = {");
+
+    fs.rmSync(tempDir, { recursive: true, force: true });
+  });
+
   it("returns an actionable error for HTTP failures", async () => {
     vi.mocked(resolveSavedVariablesFile).mockResolvedValue("/tmp/Puschelz.lua");
     vi.stubGlobal(
@@ -277,6 +413,39 @@ describe("BridgeService", () => {
         return new Response(
           JSON.stringify({
             snapshotVersion: "bad",
+            requiredAddonsVersion: 17,
+            generatedAt: 1773000000000,
+            recipes: [],
+            openRequests: [],
+            requiredAddons: [],
+          }),
+          {
+            status: 200,
+            headers: { "Content-Type": "application/json" },
+          }
+        );
+      })
+    );
+
+    const service = new BridgeService();
+    await expect(
+      service.refresh({
+        endpointUrl: "https://puschelz.de",
+        apiToken: "pz_test",
+        wowPath: "/unused/by-mock",
+      })
+    ).rejects.toThrow("Bridge refresh returned an invalid payload");
+  });
+
+  it("rejects invalid requiredAddonsVersion payload shapes", async () => {
+    vi.mocked(resolveSavedVariablesFile).mockResolvedValue("/tmp/Puschelz.lua");
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => {
+        return new Response(
+          JSON.stringify({
+            snapshotVersion: 88,
+            requiredAddonsVersion: "bad",
             generatedAt: 1773000000000,
             recipes: [],
             openRequests: [],
