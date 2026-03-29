@@ -1,3 +1,4 @@
+import fs from "node:fs";
 import path from "node:path";
 import {
   app,
@@ -76,7 +77,20 @@ function getConfig(): SyncConfig {
 }
 
 function getInstallDirectory(): string {
-  return path.dirname(process.execPath);
+  const executablePath = process.execPath;
+  const executableDir = path.dirname(executablePath);
+  const executableDirName = path.basename(executableDir);
+  const installRoot = path.dirname(executableDir);
+
+  if (
+    process.platform === "win32" &&
+    /^app-[^\\/]+$/i.test(executableDirName) &&
+    fs.existsSync(path.join(installRoot, "Update.exe"))
+  ) {
+    return installRoot;
+  }
+
+  return executableDir;
 }
 
 function applyConfigDefaultsAndAutoDetection(): void {
@@ -207,7 +221,8 @@ function refreshTrayMenu(): void {
     },
     {
       label: "Check for Updates",
-      enabled: updateStatus.enabled && updateStatus.state !== "checking",
+      enabled:
+        updateStatus.enabled && !updateStatus.restartRequired && updateStatus.state !== "checking",
       click: () => {
         void checkForUpdates({ userInitiated: true });
       },
@@ -334,6 +349,14 @@ function ensureAutoUpdateLoop(): void {
 }
 
 async function checkForUpdates(options: { userInitiated: boolean }): Promise<ActionResult> {
+  if (updateStatus.restartRequired) {
+    pendingUserInitiatedUpdateCheck = false;
+    return {
+      ok: false,
+      message: "An update is already downloaded. Restart the app to install it.",
+    };
+  }
+
   if (!updateCheckConfigured) {
     return {
       ok: false,
@@ -342,6 +365,7 @@ async function checkForUpdates(options: { userInitiated: boolean }): Promise<Act
   }
 
   if (updateCheckInFlight) {
+    pendingUserInitiatedUpdateCheck = pendingUserInitiatedUpdateCheck || options.userInitiated;
     return {
       ok: true,
       message: "An update check is already in progress.",
@@ -496,6 +520,7 @@ function configureAutoUpdates(): void {
   });
 
   autoUpdater.on("update-downloaded", (info) => {
+    stopAutoUpdateLoop();
     consumePendingUserInitiatedUpdateCheck();
     void promptToInstallDownloadedUpdate(info);
   });
@@ -699,10 +724,19 @@ function openSettingsWindow(): void {
 }
 
 async function openInstallFolder(): Promise<ActionResult> {
-  shell.showItemInFolder(process.execPath);
+  const installDirectory = getInstallDirectory();
+  const error = await shell.openPath(installDirectory);
+
+  if (error) {
+    return {
+      ok: false,
+      message: `Failed to open install folder: ${error}`,
+    };
+  }
+
   return {
     ok: true,
-    message: `Opened install folder: ${getInstallDirectory()}`,
+    message: `Opened install folder: ${installDirectory}`,
   };
 }
 

@@ -11,7 +11,7 @@
     "copy:renderer": "node scripts/fs-tasks.cjs copy-renderer",
     "build": "npm run clean && tsc -p tsconfig.json && npm run copy:renderer",
     "package": "npm run build && npm run clean:release && electron-builder --dir --win nsis",
-    "dist": "npm run build && npm run clean:release && electron-builder --win nsis --publish onTagOrDraft",
+    "dist": "npm run build && npm run clean:release && electron-builder --win nsis",
     "start": "npm run build && electron .",
     "dev": "npm run start",
     "test:watch": "vitest src/**/*.test.ts"

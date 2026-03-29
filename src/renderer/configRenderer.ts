@@ -106,7 +106,8 @@ function renderUpdateStatus(status: UpdateStatus): void {
 
   updateBannerNode.dataset.kind = bannerKind;
   updateBannerNode.textContent = status.detail;
-  checkForUpdatesButton.disabled = !status.enabled || status.state === "checking";
+  checkForUpdatesButton.disabled =
+    !status.enabled || status.restartRequired || status.state === "checking";
   restartToUpdateButton.style.display = status.restartRequired ? "" : "none";
 }
 
