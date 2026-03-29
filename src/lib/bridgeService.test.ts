@@ -519,4 +519,38 @@ describe("BridgeService", () => {
       })
     ).rejects.toThrow("Bridge refresh returned an invalid payload");
   });
+
+  it("rejects invalid invalidRequiredAddonCount payload shapes", async () => {
+    vi.mocked(resolveSavedVariablesFile).mockResolvedValue("/tmp/Puschelz.lua");
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => {
+        return new Response(
+          JSON.stringify({
+            snapshotVersion: 92,
+            requiredAddonsVersion: 19,
+            requiredAddonsConfiguredCount: 0,
+            invalidRequiredAddonCount: "bad",
+            generatedAt: 1773000000000,
+            recipes: [],
+            openRequests: [],
+            requiredAddons: [],
+          }),
+          {
+            status: 200,
+            headers: { "Content-Type": "application/json" },
+          }
+        );
+      })
+    );
+
+    const service = new BridgeService();
+    await expect(
+      service.refresh({
+        endpointUrl: "https://puschelz.de",
+        apiToken: "pz_test",
+        wowPath: "/unused/by-mock",
+      })
+    ).rejects.toThrow("Bridge refresh returned an invalid payload");
+  });
 });
