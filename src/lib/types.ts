@@ -129,6 +129,7 @@ export type UpdateStatus = {
   enabled: boolean;
   currentVersion: string;
   availableVersion: string | null;
+  showBannerWhenIdle: boolean;
   state:
     | "unsupported"
     | "idle"
@@ -146,4 +147,5 @@ export type RendererState = {
   config: SyncConfig;
   status: SyncStatus;
   updateStatus: UpdateStatus;
+  installDirectory: string;
 };

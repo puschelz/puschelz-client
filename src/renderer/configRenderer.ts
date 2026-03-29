@@ -15,6 +15,7 @@ type UpdateStatus = {
   enabled: boolean;
   currentVersion: string;
   availableVersion: string | null;
+  showBannerWhenIdle: boolean;
   state:
     | "unsupported"
     | "idle"
@@ -33,6 +34,7 @@ const tokenInput = document.getElementById("apiToken") as HTMLInputElement;
 const wowPathInput = document.getElementById("wowPath") as HTMLInputElement;
 const currentVersionNode = document.getElementById("currentVersion") as HTMLSpanElement;
 const latestVersionNode = document.getElementById("latestVersion") as HTMLSpanElement;
+const installDirectoryNode = document.getElementById("installDirectory") as HTMLSpanElement;
 const updateBannerNode = document.getElementById("updateBanner") as HTMLDivElement;
 const statusNode = document.getElementById("status") as HTMLDivElement;
 const watchNode = document.getElementById("watchedFile") as HTMLDivElement;
@@ -41,6 +43,8 @@ const actionFeedbackNode = document.getElementById("actionFeedback") as HTMLDivE
 const saveButton = document.getElementById("saveConfig") as HTMLButtonElement;
 const browseButton = document.getElementById("browsePath") as HTMLButtonElement;
 const syncButton = document.getElementById("syncNow") as HTMLButtonElement;
+const checkForUpdatesButton = document.getElementById("checkForUpdates") as HTMLButtonElement;
+const openInstallFolderButton = document.getElementById("openInstallFolder") as HTMLButtonElement;
 const restartToUpdateButton = document.getElementById("restartToUpdate") as HTMLButtonElement;
 
 type ActionResult = {
@@ -49,10 +53,17 @@ type ActionResult = {
 };
 
 type PuschelzBridge = {
-  loadState: () => Promise<{ config: SyncConfig; status: SyncStatus; updateStatus: UpdateStatus }>;
+  loadState: () => Promise<{
+    config: SyncConfig;
+    status: SyncStatus;
+    updateStatus: UpdateStatus;
+    installDirectory: string;
+  }>;
   saveConfig: (config: SyncConfig) => Promise<ActionResult>;
   pickWowPath: () => Promise<string | null>;
   syncNow: () => Promise<ActionResult>;
+  checkForUpdates: () => Promise<ActionResult>;
+  openInstallFolder: () => Promise<ActionResult>;
   restartToUpdate: () => Promise<ActionResult>;
   onStatus: (listener: (status: SyncStatus) => void) => () => void;
   onUpdateStatus: (listener: (status: UpdateStatus) => void) => () => void;
@@ -87,7 +98,7 @@ function renderUpdateStatus(status: UpdateStatus): void {
 
   if (status.state === "unsupported" || (!status.enabled && status.state === "idle")) {
     updateBannerNode.style.display = "none";
-  } else if (status.state === "idle") {
+  } else if (status.state === "idle" && !status.showBannerWhenIdle) {
     updateBannerNode.style.display = "none";
   } else {
     updateBannerNode.style.display = "block";
@@ -95,6 +106,8 @@ function renderUpdateStatus(status: UpdateStatus): void {
 
   updateBannerNode.dataset.kind = bannerKind;
   updateBannerNode.textContent = status.detail;
+  checkForUpdatesButton.disabled =
+    !status.enabled || status.restartRequired || status.state === "checking";
   restartToUpdateButton.style.display = status.restartRequired ? "" : "none";
 }
 
@@ -107,6 +120,7 @@ function setButtonsDisabled(disabled: boolean): void {
   saveButton.disabled = disabled;
   browseButton.disabled = disabled;
   syncButton.disabled = disabled;
+  openInstallFolderButton.disabled = disabled;
   restartToUpdateButton.disabled = disabled;
 }
 
@@ -141,6 +155,7 @@ async function init(): Promise<void> {
   endpointInput.value = state.config.endpointUrl;
   tokenInput.value = state.config.apiToken;
   wowPathInput.value = state.config.wowPath;
+  installDirectoryNode.textContent = state.installDirectory;
   renderStatus(state.status);
   renderUpdateStatus(state.updateStatus);
   setActionFeedback("info", "Ready.");
@@ -206,6 +221,50 @@ syncButton.addEventListener("click", async () => {
     setActionFeedback(result.ok ? "success" : "error", result.message);
   } catch (error) {
     setActionFeedback("error", `Sync failed: ${String(error)}`);
+  } finally {
+    setButtonsDisabled(false);
+  }
+});
+
+checkForUpdatesButton.addEventListener("click", async () => {
+  const api = bridge();
+  if (!api) {
+    setActionFeedback("error", "Update check failed: client bridge unavailable.");
+    return;
+  }
+
+  setButtonsDisabled(true);
+  checkForUpdatesButton.disabled = true;
+  setActionFeedback("info", "Checking for updates...");
+  try {
+    const result = await api.checkForUpdates();
+    setActionFeedback(result.ok ? "info" : "error", result.message);
+  } catch (error) {
+    setActionFeedback("error", `Update check failed: ${String(error)}`);
+  } finally {
+    setButtonsDisabled(false);
+    try {
+      renderUpdateStatus((await api.loadState()).updateStatus);
+    } catch {
+      checkForUpdatesButton.disabled = false;
+      // If the state refresh fails, keep the control usable until the next update-status event arrives.
+    }
+  }
+});
+
+openInstallFolderButton.addEventListener("click", async () => {
+  const api = bridge();
+  if (!api) {
+    setActionFeedback("error", "Open install folder failed: client bridge unavailable.");
+    return;
+  }
+
+  setButtonsDisabled(true);
+  try {
+    const result = await api.openInstallFolder();
+    setActionFeedback(result.ok ? "success" : "error", result.message);
+  } catch (error) {
+    setActionFeedback("error", `Open install folder failed: ${String(error)}`);
   } finally {
     setButtonsDisabled(false);
   }

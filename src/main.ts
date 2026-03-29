@@ -1,24 +1,39 @@
+import fs from "node:fs";
 import path from "node:path";
-import { app, autoUpdater, BrowserWindow, dialog, ipcMain, Menu, Tray, nativeImage } from "electron";
+import {
+  app,
+  BrowserWindow,
+  dialog,
+  ipcMain,
+  Menu,
+  nativeImage,
+  Notification,
+  shell,
+  Tray,
+} from "electron";
 import type { OpenDialogOptions } from "electron";
+import { autoUpdater, type ProgressInfo, type UpdateInfo } from "electron-updater";
 import { AddonWatcher } from "./lib/addonWatcher";
 import { BridgeService } from "./lib/bridgeService";
 import { ConfigStore } from "./lib/configStore";
 import type { RendererState, SyncConfig, SyncStatus, UpdateStatus } from "./lib/types";
-import { cleanupOldInstalledVersions } from "./lib/windowsAppCleanup";
 import { detectWowInstallPath } from "./lib/wowPathDetection";
-import { updateElectronApp, UpdateSourceType, type IUpdateInfo } from "update-electron-app";
 
 const configStore = new ConfigStore();
 const addonWatcher = new AddonWatcher();
 const bridgeService = new BridgeService();
 const BRIDGE_REFRESH_INTERVAL_MS = 5 * 60 * 1000;
+const AUTO_UPDATE_CHECK_INTERVAL_MS = 6 * 60 * 60 * 1000;
 
 let tray: Tray | null = null;
 let settingsWindow: BrowserWindow | null = null;
 let bridgeRefreshTimer: NodeJS.Timeout | null = null;
 let bridgeRefreshInFlight: Promise<void> | null = null;
+let autoUpdateTimer: NodeJS.Timeout | null = null;
 let updateCheckConfigured = false;
+let updateCheckInFlight: Promise<void> | null = null;
+let pendingUserInitiatedUpdateCheck = false;
+let updatePromptInFlight = false;
 
 let status: SyncStatus = {
   state: "idle",
@@ -31,6 +46,7 @@ let updateStatus: UpdateStatus = {
   enabled: false,
   currentVersion: app.getVersion(),
   availableVersion: null,
+  showBannerWhenIdle: false,
   state: "unsupported",
   detail: "Automatic updates are only available for installed Windows builds.",
   checkedAt: null,
@@ -58,6 +74,23 @@ function listMissingConfig(config: SyncConfig): string[] {
 
 function getConfig(): SyncConfig {
   return configStore.getConfig();
+}
+
+function getInstallDirectory(): string {
+  const executablePath = process.execPath;
+  const executableDir = path.dirname(executablePath);
+  const executableDirName = path.basename(executableDir);
+  const installRoot = path.dirname(executableDir);
+
+  if (
+    process.platform === "win32" &&
+    /^app-[^\\/]+$/i.test(executableDirName) &&
+    fs.existsSync(path.join(installRoot, "Update.exe"))
+  ) {
+    return installRoot;
+  }
+
+  return executableDir;
 }
 
 function applyConfigDefaultsAndAutoDetection(): void {
@@ -130,6 +163,22 @@ function updateLabel(): string {
   return `Version: v${updateStatus.currentVersion}`;
 }
 
+function showNotification(title: string, body: string): void {
+  if (!Notification.isSupported()) {
+    return;
+  }
+
+  const notification = new Notification({
+    title,
+    body,
+    silent: false,
+  });
+  notification.on("click", () => {
+    openSettingsWindow();
+  });
+  notification.show();
+}
+
 function refreshTrayMenu(): void {
   if (!tray) {
     return;
@@ -154,6 +203,30 @@ function refreshTrayMenu(): void {
       enabled: false,
     },
     { type: "separator" },
+    {
+      label: "Open Settings",
+      click: () => openSettingsWindow(),
+    },
+    {
+      label: "Open Install Folder",
+      click: () => {
+        void openInstallFolder();
+      },
+    },
+    {
+      label: "Sync Now",
+      click: () => {
+        void runManualSync();
+      },
+    },
+    {
+      label: "Check for Updates",
+      enabled:
+        updateStatus.enabled && !updateStatus.restartRequired && updateStatus.state !== "checking",
+      click: () => {
+        void checkForUpdates({ userInitiated: true });
+      },
+    },
     ...(updateStatus.restartRequired
       ? [
           {
@@ -164,21 +237,12 @@ function refreshTrayMenu(): void {
           } as const,
         ]
       : []),
-    {
-      label: "Open Settings",
-      click: () => openSettingsWindow(),
-    },
-    {
-      label: "Sync Now",
-      click: () => {
-        void runManualSync();
-      },
-    },
     { type: "separator" },
     {
       label: "Quit",
       click: () => {
         stopBridgeRefreshLoop();
+        stopAutoUpdateLoop();
         void addonWatcher.stop().finally(() => app.quit());
       },
     },
@@ -191,18 +255,14 @@ function isWindowsPackagedInstall(): boolean {
   return process.platform === "win32" && app.isPackaged;
 }
 
-function isSquirrelFirstRun(): boolean {
-  return process.argv.includes("--squirrel-firstrun");
+function versionFromUpdateInfo(info: UpdateInfo): string | null {
+  return typeof info.version === "string" && info.version.trim() ? info.version.trim() : null;
 }
 
-function versionFromUpdateInfo(info: IUpdateInfo): string | null {
-  const releaseName = typeof info.releaseName === "string" ? info.releaseName.trim() : "";
-  if (!releaseName) {
-    return null;
-  }
-
-  const match = releaseName.match(/v?(\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?)/);
-  return match?.[1] ?? releaseName;
+function consumePendingUserInitiatedUpdateCheck(): boolean {
+  const pending = pendingUserInitiatedUpdateCheck;
+  pendingUserInitiatedUpdateCheck = false;
+  return pending;
 }
 
 async function restartToInstallUpdate(): Promise<ActionResult> {
@@ -214,6 +274,7 @@ async function restartToInstallUpdate(): Promise<ActionResult> {
   }
 
   stopBridgeRefreshLoop();
+  stopAutoUpdateLoop();
   try {
     await addonWatcher.stop();
   } catch {
@@ -227,44 +288,108 @@ async function restartToInstallUpdate(): Promise<ActionResult> {
   };
 }
 
-async function promptToInstallDownloadedUpdate(info: IUpdateInfo): Promise<void> {
-  const availableVersion = versionFromUpdateInfo(info);
-  setUpdateStatus({
-    availableVersion,
-    state: "downloaded",
-    restartRequired: true,
-    detail: availableVersion
-      ? `Update v${availableVersion} is ready. Restart to install it.`
-      : "A new update is ready. Restart to install it.",
-    checkedAt: Date.now(),
-  });
+async function promptToInstallDownloadedUpdate(info: UpdateInfo): Promise<void> {
+  if (updatePromptInFlight) {
+    return;
+  }
 
-  const result = settingsWindow
-    ? await dialog.showMessageBox(settingsWindow, {
-        type: "info",
-        buttons: ["Restart now", "Later"],
-        defaultId: 0,
-        cancelId: 1,
-        title: "Update Ready",
-        message: availableVersion
-          ? `Puschelz Client v${availableVersion} has been downloaded.`
-          : "A new Puschelz Client update has been downloaded.",
-        detail: "Restart the app now to install the update, or choose Later to keep working.",
-      })
-    : await dialog.showMessageBox({
-        type: "info",
-        buttons: ["Restart now", "Later"],
-        defaultId: 0,
-        cancelId: 1,
-        title: "Update Ready",
-        message: availableVersion
-          ? `Puschelz Client v${availableVersion} has been downloaded.`
-          : "A new Puschelz Client update has been downloaded.",
-        detail: "Restart the app now to install the update, or choose Later to keep working.",
-      });
+  updatePromptInFlight = true;
+  try {
+    const availableVersion = versionFromUpdateInfo(info);
+    const message = availableVersion
+      ? `Puschelz Client v${availableVersion} has been downloaded.`
+      : "A new Puschelz Client update has been downloaded.";
+    const updateDialogOptions = {
+      type: "info" as const,
+      buttons: ["Restart now", "Later"],
+      defaultId: 0,
+      cancelId: 1,
+      title: "Update Ready",
+      message,
+      detail: "Restart the app now to install the update, or choose Later to keep working.",
+    };
 
-  if (result.response === 0) {
-    await restartToInstallUpdate();
+    setUpdateStatus({
+      availableVersion,
+      showBannerWhenIdle: false,
+      state: "downloaded",
+      restartRequired: true,
+      detail: availableVersion
+        ? `Update v${availableVersion} is ready. Restart to install it.`
+        : "A new update is ready. Restart to install it.",
+      checkedAt: Date.now(),
+    });
+
+    showNotification("Puschelz update ready", message);
+
+    const result = settingsWindow
+      ? await dialog.showMessageBox(settingsWindow, updateDialogOptions)
+      : await dialog.showMessageBox(updateDialogOptions);
+
+    if (result.response === 0) {
+      await restartToInstallUpdate();
+    }
+  } finally {
+    updatePromptInFlight = false;
+  }
+}
+
+function stopAutoUpdateLoop(): void {
+  if (autoUpdateTimer) {
+    clearInterval(autoUpdateTimer);
+    autoUpdateTimer = null;
+  }
+}
+
+function ensureAutoUpdateLoop(): void {
+  stopAutoUpdateLoop();
+  autoUpdateTimer = setInterval(() => {
+    void checkForUpdates({ userInitiated: false }).catch(() => {});
+  }, AUTO_UPDATE_CHECK_INTERVAL_MS);
+}
+
+async function checkForUpdates(options: { userInitiated: boolean }): Promise<ActionResult> {
+  if (updateStatus.restartRequired) {
+    pendingUserInitiatedUpdateCheck = false;
+    return {
+      ok: false,
+      message: "An update is already downloaded. Restart the app to install it.",
+    };
+  }
+
+  if (!updateCheckConfigured) {
+    return {
+      ok: false,
+      message: updateStatus.detail,
+    };
+  }
+
+  if (updateCheckInFlight) {
+    pendingUserInitiatedUpdateCheck = pendingUserInitiatedUpdateCheck || options.userInitiated;
+    return {
+      ok: true,
+      message: "An update check is already in progress.",
+    };
+  }
+
+  pendingUserInitiatedUpdateCheck = pendingUserInitiatedUpdateCheck || options.userInitiated;
+  updateCheckInFlight = autoUpdater.checkForUpdates().then(() => undefined);
+
+  try {
+    await updateCheckInFlight;
+    return {
+      ok: true,
+      message: options.userInitiated
+        ? "Checking for updates..."
+        : "Scheduled update check started.",
+    };
+  } catch (error) {
+    return {
+      ok: false,
+      message: `Update check failed: ${error instanceof Error ? error.message : String(error)}`,
+    };
+  } finally {
+    updateCheckInFlight = null;
   }
 }
 
@@ -276,6 +401,7 @@ function configureAutoUpdates(): void {
   if (!isWindowsPackagedInstall()) {
     setUpdateStatus({
       enabled: false,
+      showBannerWhenIdle: false,
       state: "unsupported",
       detail: app.isPackaged
         ? "Automatic updates are only enabled for Windows builds."
@@ -286,131 +412,121 @@ function configureAutoUpdates(): void {
     return;
   }
 
-  if (isSquirrelFirstRun()) {
-    setUpdateStatus({
-      enabled: true,
-      state: "idle",
-      detail: "Update checks will start on the next launch after initial install.",
-      checkedAt: null,
-      restartRequired: false,
-    });
-    return;
-  }
-
   updateCheckConfigured = true;
+  autoUpdater.autoDownload = true;
+  autoUpdater.autoInstallOnAppQuit = false;
+
   setUpdateStatus({
     enabled: true,
+    showBannerWhenIdle: false,
     state: "idle",
-    detail: "Waiting to check for updates.",
+    detail: "Automatic update checks are enabled.",
     checkedAt: null,
     restartRequired: false,
   });
 
   autoUpdater.on("checking-for-update", () => {
     if (updateStatus.restartRequired) {
-      setUpdateStatus({
-        enabled: true,
-        state: "downloaded",
-        detail: updateStatus.detail,
-        checkedAt: Date.now(),
-      });
       return;
     }
 
     setUpdateStatus({
       enabled: true,
+      showBannerWhenIdle: false,
       state: "checking",
       detail: "Checking for updates...",
       checkedAt: Date.now(),
     });
   });
 
-  autoUpdater.on("update-available", () => {
+  autoUpdater.on("update-available", (info) => {
     if (updateStatus.restartRequired) {
-      setUpdateStatus({
-        enabled: true,
-        state: "downloaded",
-        detail: updateStatus.detail,
-        checkedAt: Date.now(),
-      });
       return;
     }
 
+    const availableVersion = versionFromUpdateInfo(info);
+    setUpdateStatus({
+      enabled: true,
+      availableVersion,
+      showBannerWhenIdle: false,
+      state: "downloading",
+      detail: availableVersion
+        ? `Update v${availableVersion} is downloading in the background.`
+        : "A new update is downloading in the background.",
+      checkedAt: Date.now(),
+    });
+
+    showNotification(
+      "Puschelz update found",
+      availableVersion
+        ? `Downloading v${availableVersion} in the background.`
+        : "Downloading the latest update in the background."
+    );
+    consumePendingUserInitiatedUpdateCheck();
+  });
+
+  autoUpdater.on("download-progress", (progress: ProgressInfo) => {
+    if (updateStatus.restartRequired) {
+      return;
+    }
+
+    const percent = Math.max(0, Math.min(100, Math.round(progress.percent)));
     setUpdateStatus({
       enabled: true,
       state: "downloading",
-      detail: "A new update is downloading in the background.",
+      detail: updateStatus.availableVersion
+        ? `Downloading update v${updateStatus.availableVersion} (${percent}%).`
+        : `Downloading update (${percent}%).`,
       checkedAt: Date.now(),
     });
   });
 
   autoUpdater.on("update-not-available", () => {
     if (updateStatus.restartRequired) {
-      setUpdateStatus({
-        enabled: true,
-        state: "downloaded",
-        detail: updateStatus.detail,
-        checkedAt: Date.now(),
-      });
       return;
     }
 
     setUpdateStatus({
       enabled: true,
       availableVersion: null,
+      showBannerWhenIdle: true,
       state: "idle",
       detail: "You are up to date.",
       checkedAt: Date.now(),
     });
+
+    if (consumePendingUserInitiatedUpdateCheck()) {
+      showNotification("Puschelz is up to date", "No new desktop client update is available.");
+    }
   });
 
   autoUpdater.on("error", (error) => {
     if (updateStatus.restartRequired) {
-      setUpdateStatus({
-        enabled: true,
-        state: "downloaded",
-        detail: updateStatus.detail,
-        checkedAt: Date.now(),
-      });
       return;
     }
 
+    const detail = `Update check failed: ${error instanceof Error ? error.message : String(error)}`;
     setUpdateStatus({
       enabled: true,
+      showBannerWhenIdle: false,
       state: "error",
-      detail: `Update check failed: ${error instanceof Error ? error.message : String(error)}`,
+      detail,
       checkedAt: Date.now(),
     });
-  });
 
-  updateElectronApp({
-    notifyUser: true,
-    onNotifyUser: (info) => {
-      void promptToInstallDownloadedUpdate(info);
-    },
-    updateSource: {
-      type: UpdateSourceType.ElectronPublicUpdateService,
-      repo: "puschelz/puschelz-client",
-    },
-  });
-}
-
-async function cleanupOldInstalledVersionsIfNeeded(): Promise<void> {
-  if (!isWindowsPackagedInstall()) {
-    return;
-  }
-  if (isSquirrelFirstRun()) {
-    return;
-  }
-
-  try {
-    const removedDirs = await cleanupOldInstalledVersions(process.execPath);
-    if (removedDirs.length > 0) {
-      console.info("Removed stale installed client versions.", removedDirs);
+    if (consumePendingUserInitiatedUpdateCheck()) {
+      showNotification("Puschelz update failed", detail);
     }
-  } catch (error) {
-    console.warn("Failed to remove stale installed versions.", error);
-  }
+  });
+
+  autoUpdater.on("update-downloaded", (info) => {
+    stopAutoUpdateLoop();
+    consumePendingUserInitiatedUpdateCheck();
+    void promptToInstallDownloadedUpdate(info);
+  });
+
+  ensureAutoUpdateLoop();
+  void checkForUpdates({ userInitiated: false }).catch(() => {});
 }
 
 function getCallbacks() {
@@ -589,8 +705,8 @@ function openSettingsWindow(): void {
   }
 
   settingsWindow = new BrowserWindow({
-    width: 780,
-    height: 600,
+    width: 860,
+    height: 680,
     autoHideMenuBar: true,
     webPreferences: {
       preload: path.join(__dirname, "preload.js"),
@@ -605,6 +721,23 @@ function openSettingsWindow(): void {
   settingsWindow.on("closed", () => {
     settingsWindow = null;
   });
+}
+
+async function openInstallFolder(): Promise<ActionResult> {
+  const installDirectory = getInstallDirectory();
+  const error = await shell.openPath(installDirectory);
+
+  if (error) {
+    return {
+      ok: false,
+      message: `Failed to open install folder: ${error}`,
+    };
+  }
+
+  return {
+    ok: true,
+    message: `Opened install folder: ${installDirectory}`,
+  };
 }
 
 async function pickWowPath(): Promise<string | null> {
@@ -629,6 +762,7 @@ function registerIpcHandlers(): void {
     config: getConfig(),
     status,
     updateStatus,
+    installDirectory: getInstallDirectory(),
   }));
 
   ipcMain.handle("config:save", async (_event, config: SyncConfig): Promise<ActionResult> => {
@@ -642,8 +776,16 @@ function registerIpcHandlers(): void {
     return await runManualSync();
   });
 
+  ipcMain.handle("update:check", async (): Promise<ActionResult> => {
+    return await checkForUpdates({ userInitiated: true });
+  });
+
   ipcMain.handle("update:restart", async (): Promise<ActionResult> => {
     return await restartToInstallUpdate();
+  });
+
+  ipcMain.handle("app:openInstallFolder", async (): Promise<ActionResult> => {
+    return await openInstallFolder();
   });
 }
 
@@ -661,7 +803,6 @@ app.whenReady().then(async () => {
   createTray();
   registerIpcHandlers();
   configureAutoUpdates();
-  void cleanupOldInstalledVersionsIfNeeded();
   await startWatcher();
 });
 
@@ -669,5 +810,6 @@ app.on("window-all-closed", () => {});
 
 app.on("before-quit", () => {
   stopBridgeRefreshLoop();
+  stopAutoUpdateLoop();
   void addonWatcher.stop();
 });

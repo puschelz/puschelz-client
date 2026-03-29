@@ -12,7 +12,9 @@ contextBridge.exposeInMainWorld("puschelz", {
     ipcRenderer.invoke("config:save", config),
   pickWowPath: async (): Promise<string | null> => ipcRenderer.invoke("wowPath:pick"),
   syncNow: async (): Promise<ActionResult> => ipcRenderer.invoke("sync:now"),
+  checkForUpdates: async (): Promise<ActionResult> => ipcRenderer.invoke("update:check"),
   restartToUpdate: async (): Promise<ActionResult> => ipcRenderer.invoke("update:restart"),
+  openInstallFolder: async (): Promise<ActionResult> => ipcRenderer.invoke("app:openInstallFolder"),
   onStatus: (listener: (status: SyncStatus) => void) => {
     const wrapped = (_event: Electron.IpcRendererEvent, status: SyncStatus) => listener(status);
     ipcRenderer.on("status:changed", wrapped);
@@ -32,7 +34,9 @@ declare global {
       saveConfig: (config: SyncConfig) => Promise<ActionResult>;
       pickWowPath: () => Promise<string | null>;
       syncNow: () => Promise<ActionResult>;
+      checkForUpdates: () => Promise<ActionResult>;
       restartToUpdate: () => Promise<ActionResult>;
+      openInstallFolder: () => Promise<ActionResult>;
       onStatus: (listener: (status: SyncStatus) => void) => () => void;
       onUpdateStatus: (listener: (status: UpdateStatus) => void) => () => void;
     };
