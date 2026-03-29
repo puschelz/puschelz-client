@@ -83,6 +83,8 @@ function renderBridgeLua(snapshot: BridgeSnapshot): string {
   schemaVersion = ${BRIDGE_SCHEMA_VERSION},
   snapshotVersion = ${snapshot.snapshotVersion},
   requiredAddonsVersion = ${snapshot.requiredAddonsVersion},
+  requiredAddonsConfiguredCount = ${snapshot.requiredAddonsConfiguredCount},
+  invalidRequiredAddonCount = ${snapshot.invalidRequiredAddonCount},
   generatedAt = ${snapshot.generatedAt},
   recipesByKey = {
 ${recipeLines.join("\n")}
@@ -147,15 +149,36 @@ export class BridgeService {
       throw new Error("Bridge refresh returned an invalid payload");
     }
     if (
+      rawSnapshot.requiredAddonsConfiguredCount !== undefined &&
+      typeof rawSnapshot.requiredAddonsConfiguredCount !== "number"
+    ) {
+      throw new Error("Bridge refresh returned an invalid payload");
+    }
+    if (
+      rawSnapshot.invalidRequiredAddonCount !== undefined &&
+      typeof rawSnapshot.invalidRequiredAddonCount !== "number"
+    ) {
+      throw new Error("Bridge refresh returned an invalid payload");
+    }
+    if (
       rawSnapshot.requiredAddons !== undefined &&
       !Array.isArray(rawSnapshot.requiredAddons)
     ) {
       throw new Error("Bridge refresh returned an invalid payload");
     }
 
+    const requiredAddonCount = rawSnapshot.requiredAddons?.length ?? 0;
+    // Legacy bridge payloads may omit the new diagnostics entirely.
+    const configuredRequiredAddonCount =
+      rawSnapshot.requiredAddonsConfiguredCount ?? requiredAddonCount;
+
     const snapshot: BridgeSnapshot = {
       snapshotVersion: rawSnapshot.snapshotVersion,
       requiredAddonsVersion: rawSnapshot.requiredAddonsVersion ?? 0,
+      requiredAddonsConfiguredCount: configuredRequiredAddonCount,
+      invalidRequiredAddonCount:
+        rawSnapshot.invalidRequiredAddonCount ??
+        Math.max(0, configuredRequiredAddonCount - requiredAddonCount),
       generatedAt: rawSnapshot.generatedAt,
       recipes: rawSnapshot.recipes,
       openRequests: rawSnapshot.openRequests,
