@@ -45,6 +45,7 @@ let updateStatus: UpdateStatus = {
   enabled: false,
   currentVersion: app.getVersion(),
   availableVersion: null,
+  showBannerWhenIdle: false,
   state: "unsupported",
   detail: "Automatic updates are only available for installed Windows builds.",
   checkedAt: null,
@@ -283,9 +284,19 @@ async function promptToInstallDownloadedUpdate(info: UpdateInfo): Promise<void> 
     const message = availableVersion
       ? `Puschelz Client v${availableVersion} has been downloaded.`
       : "A new Puschelz Client update has been downloaded.";
+    const updateDialogOptions = {
+      type: "info" as const,
+      buttons: ["Restart now", "Later"],
+      defaultId: 0,
+      cancelId: 1,
+      title: "Update Ready",
+      message,
+      detail: "Restart the app now to install the update, or choose Later to keep working.",
+    };
 
     setUpdateStatus({
       availableVersion,
+      showBannerWhenIdle: false,
       state: "downloaded",
       restartRequired: true,
       detail: availableVersion
@@ -297,24 +308,8 @@ async function promptToInstallDownloadedUpdate(info: UpdateInfo): Promise<void> 
     showNotification("Puschelz update ready", message);
 
     const result = settingsWindow
-      ? await dialog.showMessageBox(settingsWindow, {
-          type: "info",
-          buttons: ["Restart now", "Later"],
-          defaultId: 0,
-          cancelId: 1,
-          title: "Update Ready",
-          message,
-          detail: "Restart the app now to install the update, or choose Later to keep working.",
-        })
-      : await dialog.showMessageBox({
-          type: "info",
-          buttons: ["Restart now", "Later"],
-          defaultId: 0,
-          cancelId: 1,
-          title: "Update Ready",
-          message,
-          detail: "Restart the app now to install the update, or choose Later to keep working.",
-        });
+      ? await dialog.showMessageBox(settingsWindow, updateDialogOptions)
+      : await dialog.showMessageBox(updateDialogOptions);
 
     if (result.response === 0) {
       await restartToInstallUpdate();
@@ -382,6 +377,7 @@ function configureAutoUpdates(): void {
   if (!isWindowsPackagedInstall()) {
     setUpdateStatus({
       enabled: false,
+      showBannerWhenIdle: false,
       state: "unsupported",
       detail: app.isPackaged
         ? "Automatic updates are only enabled for Windows builds."
@@ -398,6 +394,7 @@ function configureAutoUpdates(): void {
 
   setUpdateStatus({
     enabled: true,
+    showBannerWhenIdle: false,
     state: "idle",
     detail: "Automatic update checks are enabled.",
     checkedAt: null,
@@ -411,6 +408,7 @@ function configureAutoUpdates(): void {
 
     setUpdateStatus({
       enabled: true,
+      showBannerWhenIdle: false,
       state: "checking",
       detail: "Checking for updates...",
       checkedAt: Date.now(),
@@ -426,6 +424,7 @@ function configureAutoUpdates(): void {
     setUpdateStatus({
       enabled: true,
       availableVersion,
+      showBannerWhenIdle: false,
       state: "downloading",
       detail: availableVersion
         ? `Update v${availableVersion} is downloading in the background.`
@@ -466,6 +465,7 @@ function configureAutoUpdates(): void {
     setUpdateStatus({
       enabled: true,
       availableVersion: null,
+      showBannerWhenIdle: true,
       state: "idle",
       detail: "You are up to date.",
       checkedAt: Date.now(),
@@ -484,6 +484,7 @@ function configureAutoUpdates(): void {
     const detail = `Update check failed: ${error instanceof Error ? error.message : String(error)}`;
     setUpdateStatus({
       enabled: true,
+      showBannerWhenIdle: false,
       state: "error",
       detail,
       checkedAt: Date.now(),

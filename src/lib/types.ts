@@ -129,6 +129,7 @@ export type UpdateStatus = {
   enabled: boolean;
   currentVersion: string;
   availableVersion: string | null;
+  showBannerWhenIdle: boolean;
   state:
     | "unsupported"
     | "idle"

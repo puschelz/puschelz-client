@@ -15,6 +15,7 @@ type UpdateStatus = {
   enabled: boolean;
   currentVersion: string;
   availableVersion: string | null;
+  showBannerWhenIdle: boolean;
   state:
     | "unsupported"
     | "idle"
@@ -97,7 +98,7 @@ function renderUpdateStatus(status: UpdateStatus): void {
 
   if (status.state === "unsupported" || (!status.enabled && status.state === "idle")) {
     updateBannerNode.style.display = "none";
-  } else if (status.state === "idle" && status.detail === "Automatic update checks are enabled.") {
+  } else if (status.state === "idle" && !status.showBannerWhenIdle) {
     updateBannerNode.style.display = "none";
   } else {
     updateBannerNode.style.display = "block";
@@ -241,7 +242,12 @@ checkForUpdatesButton.addEventListener("click", async () => {
     setActionFeedback("error", `Update check failed: ${String(error)}`);
   } finally {
     setButtonsDisabled(false);
-    renderUpdateStatus((await api.loadState()).updateStatus);
+    try {
+      renderUpdateStatus((await api.loadState()).updateStatus);
+    } catch {
+      checkForUpdatesButton.disabled = false;
+      // If the state refresh fails, keep the control usable until the next update-status event arrives.
+    }
   }
 });
 
