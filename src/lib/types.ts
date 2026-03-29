@@ -146,4 +146,5 @@ export type RendererState = {
   config: SyncConfig;
   status: SyncStatus;
   updateStatus: UpdateStatus;
+  installDirectory: string;
 };
