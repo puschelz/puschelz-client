@@ -110,6 +110,8 @@ export type BridgeRequiredAddon = {
 export type BridgeSnapshot = {
   snapshotVersion: number;
   requiredAddonsVersion: number;
+  requiredAddonsConfiguredCount: number;
+  invalidRequiredAddonCount: number;
   generatedAt: number;
   recipes: BridgeRecipe[];
   openRequests: BridgeOpenRequest[];
@@ -123,20 +125,18 @@ export type SyncStatus = {
   watchedFile: string | null;
 };
 
-export type UpdateState =
-  | "unsupported"
-  | "idle"
-  | "checking"
-  | "available"
-  | "downloading"
-  | "downloaded"
-  | "error";
-
 export type UpdateStatus = {
   enabled: boolean;
   currentVersion: string;
   availableVersion: string | null;
-  state: UpdateState;
+  state:
+    | "unsupported"
+    | "idle"
+    | "checking"
+    | "available"
+    | "downloading"
+    | "downloaded"
+    | "error";
   detail: string;
   checkedAt: number | null;
   restartRequired: boolean;

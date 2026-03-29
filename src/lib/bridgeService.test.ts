@@ -32,6 +32,8 @@ function makeSnapshot(snapshotVersion: number) {
   return {
     snapshotVersion,
     requiredAddonsVersion: snapshotVersion + 100,
+    requiredAddonsConfiguredCount: 1,
+    invalidRequiredAddonCount: 0,
     generatedAt: 1773000000000,
     recipes: [
       {
@@ -105,6 +107,8 @@ describe("BridgeService", () => {
     expect(bridgeSource).toContain('["447379:225646"]');
     expect(bridgeSource).toContain('requestId = "j57abc"');
     expect(bridgeSource).toContain("requiredAddonsVersion = 142");
+    expect(bridgeSource).toContain("requiredAddonsConfiguredCount = 1");
+    expect(bridgeSource).toContain("invalidRequiredAddonCount = 0");
     expect(bridgeSource).toContain('name = "WeakAuras"');
     expect(bridgeSource).toContain('matchFolderNames = { "WeakAuras", "WeakAurasOptions" }');
 
@@ -157,6 +161,8 @@ describe("BridgeService", () => {
           JSON.stringify({
             snapshotVersion: 7,
             requiredAddonsVersion: 17,
+            requiredAddonsConfiguredCount: 0,
+            invalidRequiredAddonCount: 0,
             generatedAt: 1773000000000,
             recipes: [],
             openRequests: [],
@@ -252,6 +258,8 @@ describe("BridgeService", () => {
           JSON.stringify({
             snapshotVersion: 21,
             requiredAddonsVersion: 200,
+            requiredAddonsConfiguredCount: 1,
+            invalidRequiredAddonCount: 0,
             generatedAt: 1773000000000,
             recipes: [],
             openRequests: [],
@@ -287,6 +295,8 @@ describe("BridgeService", () => {
           JSON.stringify({
             snapshotVersion: 21,
             requiredAddonsVersion: 201,
+            requiredAddonsConfiguredCount: 2,
+            invalidRequiredAddonCount: 1,
             generatedAt: 1773000000000,
             recipes: [],
             openRequests: [],
@@ -314,6 +324,8 @@ describe("BridgeService", () => {
 
     const bridgeSource = fs.readFileSync(bridgePath, "utf8");
     expect(bridgeSource).toContain("requiredAddonsVersion = 201");
+    expect(bridgeSource).toContain("requiredAddonsConfiguredCount = 2");
+    expect(bridgeSource).toContain("invalidRequiredAddonCount = 1");
     expect(bridgeSource).toContain('matchFolderNames = { "WeakAuras", "WeakAurasOptions" }');
 
     fs.rmSync(tempDir, { recursive: true, force: true });
@@ -356,6 +368,8 @@ describe("BridgeService", () => {
     });
     const bridgeSource = fs.readFileSync(path.join(tempDir, "PuschelzBridge.lua"), "utf8");
     expect(bridgeSource).toContain("requiredAddonsVersion = 0");
+    expect(bridgeSource).toContain("requiredAddonsConfiguredCount = 0");
+    expect(bridgeSource).toContain("invalidRequiredAddonCount = 0");
     expect(bridgeSource).toContain("requiredAddons = {");
 
     fs.rmSync(tempDir, { recursive: true, force: true });
@@ -414,6 +428,8 @@ describe("BridgeService", () => {
           JSON.stringify({
             snapshotVersion: "bad",
             requiredAddonsVersion: 17,
+            requiredAddonsConfiguredCount: 0,
+            invalidRequiredAddonCount: 0,
             generatedAt: 1773000000000,
             recipes: [],
             openRequests: [],
@@ -446,9 +462,79 @@ describe("BridgeService", () => {
           JSON.stringify({
             snapshotVersion: 88,
             requiredAddonsVersion: "bad",
+            requiredAddonsConfiguredCount: 0,
+            invalidRequiredAddonCount: 0,
             generatedAt: 1773000000000,
             recipes: [],
             openRequests: [],
+          }),
+          {
+            status: 200,
+            headers: { "Content-Type": "application/json" },
+          }
+        );
+      })
+    );
+
+    const service = new BridgeService();
+    await expect(
+      service.refresh({
+        endpointUrl: "https://puschelz.de",
+        apiToken: "pz_test",
+        wowPath: "/unused/by-mock",
+      })
+    ).rejects.toThrow("Bridge refresh returned an invalid payload");
+  });
+
+  it("rejects invalid required addon diagnostics payload shapes", async () => {
+    vi.mocked(resolveSavedVariablesFile).mockResolvedValue("/tmp/Puschelz.lua");
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => {
+        return new Response(
+          JSON.stringify({
+            snapshotVersion: 91,
+            requiredAddonsVersion: 18,
+            requiredAddonsConfiguredCount: "bad",
+            invalidRequiredAddonCount: 0,
+            generatedAt: 1773000000000,
+            recipes: [],
+            openRequests: [],
+            requiredAddons: [],
+          }),
+          {
+            status: 200,
+            headers: { "Content-Type": "application/json" },
+          }
+        );
+      })
+    );
+
+    const service = new BridgeService();
+    await expect(
+      service.refresh({
+        endpointUrl: "https://puschelz.de",
+        apiToken: "pz_test",
+        wowPath: "/unused/by-mock",
+      })
+    ).rejects.toThrow("Bridge refresh returned an invalid payload");
+  });
+
+  it("rejects invalid invalidRequiredAddonCount payload shapes", async () => {
+    vi.mocked(resolveSavedVariablesFile).mockResolvedValue("/tmp/Puschelz.lua");
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => {
+        return new Response(
+          JSON.stringify({
+            snapshotVersion: 92,
+            requiredAddonsVersion: 19,
+            requiredAddonsConfiguredCount: 0,
+            invalidRequiredAddonCount: "bad",
+            generatedAt: 1773000000000,
+            recipes: [],
+            openRequests: [],
+            requiredAddons: [],
           }),
           {
             status: 200,
