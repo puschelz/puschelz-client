@@ -25,7 +25,7 @@ PuschelzDB = {
 
 const LUA_FIXTURE_WITH_ATTENDEES = `
 PuschelzDB = {
-  schemaVersion = 15,
+  schemaVersion = 16,
   updatedAt = 1772571273000,
   guildBank = {
     lastScannedAt = 1739400000000,
@@ -70,6 +70,14 @@ PuschelzDB = {
         outputItemHyperlink = "|cff0070dd|Hitem:225646::::::::80:::::|h[Blessed Weapon Grip]|h|r",
       },
     },
+  },
+  simcRequest = {
+    requestId = "simc-player-1",
+    requestedAt = 1772572273000,
+    characterName = "Fluffybear",
+    realmName = "Blackhand",
+    profileText = "# Fluffybear-Blackhand\\nhead=id=228911,ilevel=639\\nmain_hand=id=228921,ilevel=645",
+    runDroptimizerNow = true,
   },
 }
 `;
@@ -151,7 +159,7 @@ describe("SyncService", () => {
       wowPath: "C:/World of Warcraft",
     });
 
-    expect(fetchMock).toHaveBeenCalledTimes(3);
+    expect(fetchMock).toHaveBeenCalledTimes(4);
     const [, calendarRequest] = fetchMock.mock.calls[1] ?? [];
     expect(typeof calendarRequest?.body).toBe("string");
     const payload = JSON.parse(String(calendarRequest?.body)) as {
@@ -204,7 +212,7 @@ describe("SyncService", () => {
       wowPath: "C:/World of Warcraft",
     });
 
-    expect(fetchMock).toHaveBeenCalledTimes(3);
+    expect(fetchMock).toHaveBeenCalledTimes(4);
     const [, guildOrdersRequest] = fetchMock.mock.calls[2] ?? [];
     expect(typeof guildOrdersRequest?.body).toBe("string");
     const payload = JSON.parse(String(guildOrdersRequest?.body)) as {
@@ -244,6 +252,57 @@ describe("SyncService", () => {
               "|cff0070dd|Hitem:225646::::::::80:::::|h[Blessed Weapon Grip]|h|r",
           },
         ],
+      },
+    });
+
+    fs.rmSync(tempDir, { recursive: true, force: true });
+  });
+
+  it("includes a simcProfile payload when SavedVariables contain a pending SimC request", async () => {
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "puschelz-sync-test-"));
+    const filePath = path.join(tempDir, "Puschelz.lua");
+    fs.writeFileSync(filePath, LUA_FIXTURE_WITH_ATTENDEES, "utf8");
+
+    const fetchMock = vi.fn(async () => {
+      return new Response(JSON.stringify({ ok: true }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const service = new SyncService();
+    await service.sync(filePath, {
+      endpointUrl: "https://example.convex.site",
+      apiToken: "pz_test",
+      wowPath: "C:/World of Warcraft",
+    });
+
+    expect(fetchMock).toHaveBeenCalledTimes(4);
+    const [, simcRequest] = fetchMock.mock.calls[3] ?? [];
+    expect(typeof simcRequest?.body).toBe("string");
+
+    const payload = JSON.parse(String(simcRequest?.body)) as {
+      type: string;
+      payload: {
+        requestId: string;
+        scannedAt: number;
+        characterName: string;
+        realmName: string;
+        profileText: string;
+        runDroptimizerNow: boolean;
+      };
+    };
+
+    expect(payload).toEqual({
+      type: "simcProfile",
+      payload: {
+        requestId: "simc-player-1",
+        scannedAt: 1772572273000,
+        characterName: "Fluffybear",
+        realmName: "Blackhand",
+        profileText: "# Fluffybear-Blackhand\nhead=id=228911,ilevel=639\nmain_hand=id=228921,ilevel=645",
+        runDroptimizerNow: true,
       },
     });
 

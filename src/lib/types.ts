@@ -49,6 +49,15 @@ export type GuildOrder = {
   recraftItemHyperlink?: string;
 };
 
+export type SimcRequest = {
+  requestId: string;
+  requestedAt: number;
+  characterName: string;
+  realmName: string;
+  profileText: string;
+  runDroptimizerNow: boolean;
+};
+
 export type ParsedPuschelzDb = {
   schemaVersion: number;
   updatedAt: number;
@@ -71,6 +80,7 @@ export type ParsedPuschelzDb = {
     lastScannedAt: number;
     orders: GuildOrder[];
   };
+  simcRequest?: SimcRequest;
 };
 
 export type SyncConfig = {

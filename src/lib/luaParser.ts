@@ -6,6 +6,7 @@ import type {
   GuildBankItem,
   GuildBankTab,
   ParsedPuschelzDb,
+  SimcRequest,
 } from "./types";
 
 type LuaNode = {
@@ -92,6 +93,10 @@ function asNumber(value: unknown): number {
 
 function asString(value: unknown): string {
   return typeof value === "string" ? value : "";
+}
+
+function asBoolean(value: unknown): boolean {
+  return value === true;
 }
 
 function asLuaArray(value: unknown): unknown[] | null {
@@ -216,36 +221,69 @@ function parseGuildOrders(value: unknown): GuildOrder[] {
       orderType: "guild",
       orderState: asNumber(order.orderState),
       expirationTime: asNumber(order.expirationTime),
-      claimEndTime:
-        typeof order.claimEndTime === "number" ? order.claimEndTime : undefined,
-      minQuality:
-        typeof order.minQuality === "number" ? order.minQuality : undefined,
-      tipAmount: typeof order.tipAmount === "number" ? order.tipAmount : undefined,
-      consortiumCut:
-        typeof order.consortiumCut === "number" ? order.consortiumCut : undefined,
+      ...(typeof order.claimEndTime === "number"
+        ? { claimEndTime: order.claimEndTime }
+        : {}),
+      ...(typeof order.minQuality === "number" ? { minQuality: order.minQuality } : {}),
+      ...(typeof order.tipAmount === "number" ? { tipAmount: order.tipAmount } : {}),
+      ...(typeof order.consortiumCut === "number"
+        ? { consortiumCut: order.consortiumCut }
+        : {}),
       isRecraft: order.isRecraft === true,
       isFulfillable: order.isFulfillable === true,
-      reagentState:
-        typeof order.reagentState === "number" ? order.reagentState : undefined,
-      customerGuid:
-        typeof order.customerGuid === "string" ? order.customerGuid : undefined,
-      customerName:
-        typeof order.customerName === "string" ? order.customerName : undefined,
-      crafterGuid:
-        typeof order.crafterGuid === "string" ? order.crafterGuid : undefined,
-      crafterName:
-        typeof order.crafterName === "string" ? order.crafterName : undefined,
-      customerNotes:
-        typeof order.customerNotes === "string" ? order.customerNotes : undefined,
-      outputItemHyperlink:
-        typeof order.outputItemHyperlink === "string"
-          ? order.outputItemHyperlink
-          : undefined,
-      recraftItemHyperlink:
-        typeof order.recraftItemHyperlink === "string"
-          ? order.recraftItemHyperlink
-          : undefined,
+      ...(typeof order.reagentState === "number"
+        ? { reagentState: order.reagentState }
+        : {}),
+      ...(typeof order.customerGuid === "string"
+        ? { customerGuid: order.customerGuid }
+        : {}),
+      ...(typeof order.customerName === "string"
+        ? { customerName: order.customerName }
+        : {}),
+      ...(typeof order.crafterGuid === "string"
+        ? { crafterGuid: order.crafterGuid }
+        : {}),
+      ...(typeof order.crafterName === "string"
+        ? { crafterName: order.crafterName }
+        : {}),
+      ...(typeof order.customerNotes === "string"
+        ? { customerNotes: order.customerNotes }
+        : {}),
+      ...(typeof order.outputItemHyperlink === "string"
+        ? { outputItemHyperlink: order.outputItemHyperlink }
+        : {}),
+      ...(typeof order.recraftItemHyperlink === "string"
+        ? { recraftItemHyperlink: order.recraftItemHyperlink }
+        : {}),
     }));
+}
+
+function parseSimcRequest(value: unknown): SimcRequest | undefined {
+  if (!value || typeof value !== "object") {
+    return undefined;
+  }
+
+  const request = value as Record<string, unknown>;
+  const requestId = asString(request.requestId);
+  const characterName = asString(request.characterName);
+  const realmName = asString(request.realmName);
+  const profileText = asString(request.profileText)
+    .replace(/\\n/g, "\n")
+    .replace(/\\r/g, "\r");
+  const requestedAt = asNumber(request.requestedAt);
+
+  if (!requestId || !characterName || !realmName || !profileText || requestedAt <= 0) {
+    return undefined;
+  }
+
+  return {
+    requestId,
+    requestedAt,
+    characterName,
+    realmName,
+    profileText,
+    runDroptimizerNow: asBoolean(request.runDroptimizerNow),
+  };
 }
 
 export function parseSavedVariables(luaSource: string): ParsedPuschelzDb {
@@ -269,6 +307,7 @@ export function parseSavedVariables(luaSource: string): ParsedPuschelzDb {
   const guildBank = (root.guildBank as Record<string, unknown>) ?? {};
   const calendar = (root.calendar as Record<string, unknown>) ?? {};
   const guildOrders = (root.guildOrders as Record<string, unknown>) ?? {};
+  const simcRequest = parseSimcRequest(root.simcRequest);
 
   return {
     schemaVersion: asNumber(root.schemaVersion),
@@ -286,5 +325,6 @@ export function parseSavedVariables(luaSource: string): ParsedPuschelzDb {
       lastScannedAt: asNumber(guildOrders.lastScannedAt),
       orders: parseGuildOrders(guildOrders.orders),
     },
+    ...(simcRequest ? { simcRequest } : {}),
   };
 }

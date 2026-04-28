@@ -1,19 +1,27 @@
-# Puschelz Desktop Client (V15)
+# Puschelz Desktop Client (V16)
 
-Tray app that watches WoW `SavedVariables/Puschelz.lua`, syncs guild bank, calendar, and guild-order data to `/api/addon-sync`, and refreshes the companion bridge file from `/api/addon-bridge`.
+Tray app that watches WoW `SavedVariables/Puschelz.lua`, syncs guild bank, calendar, guild-order, and SimulationCraft export data to `/api/addon-sync`, and refreshes the companion bridge file from `/api/addon-bridge`.
 
 ## Features
 
 - Tray app that runs in background
 - Watches `Puschelz.lua` for changes
-- Parses Lua SavedVariables and POSTs both payloads:
+- Parses Lua SavedVariables and POSTs one payload per captured sync lane:
   - `type: "guildBank"`
   - `type: "calendar"`
   - `type: "guildOrders"`
+  - `type: "simcProfile"` when the addon has queued a SimC export request
 - Uses API token from Puschelz profile page
 - Writes `PuschelzBridge.lua` next to `Puschelz.lua` with craft-request bridge data and required-addon definitions
 - Settings window for endpoint URL, token, and WoW path
 - Status updates in tray and settings window
+
+## SimC flow
+
+1. The WoW addon captures the current character's SimulationCraft export into `Puschelz.lua`.
+2. WoW only flushes that data on `/reload` or logout.
+3. The desktop client reads the new `simcRequest` block and uploads it as `type: "simcProfile"`.
+4. The backend ingests the profile for the owned character and can optionally queue a Droptimizer run immediately.
 
 ## Setup
 
