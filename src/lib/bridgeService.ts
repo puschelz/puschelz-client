@@ -47,6 +47,28 @@ function resolveBridgeUrl(endpointUrl: string): string {
   return `${trimmed}/api/addon-bridge`;
 }
 
+function isFiniteNumber(value: unknown): value is number {
+  return typeof value === "number" && Number.isFinite(value);
+}
+
+function isStringArray(value: unknown): value is string[] {
+  return Array.isArray(value) && value.every((entry) => typeof entry === "string");
+}
+
+function isBridgeRequiredAddon(value: unknown): value is BridgeRequiredAddon {
+  if (!value || typeof value !== "object") {
+    return false;
+  }
+
+  const addon = value as Record<string, unknown>;
+  return (
+    typeof addon.addonId === "string" &&
+    typeof addon.name === "string" &&
+    (addon.description === undefined || typeof addon.description === "string") &&
+    isStringArray(addon.matchFolderNames)
+  );
+}
+
 function renderBridgeLua(snapshot: BridgeSnapshot): string {
   const recipeLines = snapshot.recipes
     .sort((left, right) => {
@@ -83,6 +105,8 @@ function renderBridgeLua(snapshot: BridgeSnapshot): string {
   schemaVersion = ${BRIDGE_SCHEMA_VERSION},
   snapshotVersion = ${snapshot.snapshotVersion},
   requiredAddonsVersion = ${snapshot.requiredAddonsVersion},
+  requiredAddonsConfiguredCount = ${snapshot.requiredAddonsConfiguredCount},
+  invalidRequiredAddonCount = ${snapshot.invalidRequiredAddonCount},
   generatedAt = ${snapshot.generatedAt},
   recipesByKey = {
 ${recipeLines.join("\n")}
@@ -132,8 +156,8 @@ export class BridgeService {
 
     const rawSnapshot = payload as Partial<BridgeSnapshot>;
     if (
-      typeof rawSnapshot.snapshotVersion !== "number" ||
-      typeof rawSnapshot.generatedAt !== "number" ||
+      !isFiniteNumber(rawSnapshot.snapshotVersion) ||
+      !isFiniteNumber(rawSnapshot.generatedAt) ||
       !Array.isArray(rawSnapshot.recipes) ||
       !Array.isArray(rawSnapshot.openRequests)
     ) {
@@ -142,20 +166,42 @@ export class BridgeService {
 
     if (
       rawSnapshot.requiredAddonsVersion !== undefined &&
-      typeof rawSnapshot.requiredAddonsVersion !== "number"
+      !isFiniteNumber(rawSnapshot.requiredAddonsVersion)
+    ) {
+      throw new Error("Bridge refresh returned an invalid payload");
+    }
+    if (
+      rawSnapshot.requiredAddonsConfiguredCount !== undefined &&
+      !isFiniteNumber(rawSnapshot.requiredAddonsConfiguredCount)
+    ) {
+      throw new Error("Bridge refresh returned an invalid payload");
+    }
+    if (
+      rawSnapshot.invalidRequiredAddonCount !== undefined &&
+      !isFiniteNumber(rawSnapshot.invalidRequiredAddonCount)
     ) {
       throw new Error("Bridge refresh returned an invalid payload");
     }
     if (
       rawSnapshot.requiredAddons !== undefined &&
-      !Array.isArray(rawSnapshot.requiredAddons)
+      (!Array.isArray(rawSnapshot.requiredAddons) ||
+        !rawSnapshot.requiredAddons.every(isBridgeRequiredAddon))
     ) {
       throw new Error("Bridge refresh returned an invalid payload");
     }
 
+    const requiredAddonCount = rawSnapshot.requiredAddons?.length ?? 0;
+    // Legacy bridge payloads may omit the new diagnostics entirely.
+    const configuredRequiredAddonCount =
+      rawSnapshot.requiredAddonsConfiguredCount ?? requiredAddonCount;
+
     const snapshot: BridgeSnapshot = {
       snapshotVersion: rawSnapshot.snapshotVersion,
       requiredAddonsVersion: rawSnapshot.requiredAddonsVersion ?? 0,
+      requiredAddonsConfiguredCount: configuredRequiredAddonCount,
+      invalidRequiredAddonCount:
+        rawSnapshot.invalidRequiredAddonCount ??
+        Math.max(0, configuredRequiredAddonCount - requiredAddonCount),
       generatedAt: rawSnapshot.generatedAt,
       recipes: rawSnapshot.recipes,
       openRequests: rawSnapshot.openRequests,
