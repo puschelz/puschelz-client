@@ -40,7 +40,7 @@ export class SyncService {
       Authorization: `Bearer ${config.apiToken}`,
     };
 
-    const payloads = [
+    const payloads: Array<{ type: string; payload: unknown }> = [
       {
         type: "guildBank",
         payload: {
@@ -61,6 +61,20 @@ export class SyncService {
         },
       },
     ];
+
+    if (parsed.simcRequest) {
+      payloads.push({
+        type: "simcProfile",
+        payload: {
+          requestId: parsed.simcRequest.requestId,
+          scannedAt: parsed.simcRequest.requestedAt,
+          characterName: parsed.simcRequest.characterName,
+          realmName: parsed.simcRequest.realmName,
+          profileText: parsed.simcRequest.profileText,
+          runDroptimizerNow: parsed.simcRequest.runDroptimizerNow,
+        },
+      });
+    }
 
     for (const payload of payloads) {
       const response = await fetch(syncUrl, {

@@ -323,6 +323,8 @@ describe("BridgeService", () => {
     });
 
     const bridgeSource = fs.readFileSync(bridgePath, "utf8");
+    expect(bridgeSource).not.toContain("requiredAddonsVersion = 200");
+    expect(bridgeSource).not.toContain('matchFolderNames = { "WeakAuras" }');
     expect(bridgeSource).toContain("requiredAddonsVersion = 201");
     expect(bridgeSource).toContain("requiredAddonsConfiguredCount = 2");
     expect(bridgeSource).toContain("invalidRequiredAddonCount = 1");
@@ -535,6 +537,46 @@ describe("BridgeService", () => {
             recipes: [],
             openRequests: [],
             requiredAddons: [],
+          }),
+          {
+            status: 200,
+            headers: { "Content-Type": "application/json" },
+          }
+        );
+      })
+    );
+
+    const service = new BridgeService();
+    await expect(
+      service.refresh({
+        endpointUrl: "https://puschelz.de",
+        apiToken: "pz_test",
+        wowPath: "/unused/by-mock",
+      })
+    ).rejects.toThrow("Bridge refresh returned an invalid payload");
+  });
+
+  it("rejects invalid requiredAddons entry payload shapes", async () => {
+    vi.mocked(resolveSavedVariablesFile).mockResolvedValue("/tmp/Puschelz.lua");
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => {
+        return new Response(
+          JSON.stringify({
+            snapshotVersion: 93,
+            requiredAddonsVersion: 20,
+            requiredAddonsConfiguredCount: 1,
+            invalidRequiredAddonCount: 0,
+            generatedAt: 1773000000000,
+            recipes: [],
+            openRequests: [],
+            requiredAddons: [
+              {
+                addonId: "wa",
+                name: "WeakAuras",
+                matchFolderNames: "WeakAuras",
+              },
+            ],
           }),
           {
             status: 200,
