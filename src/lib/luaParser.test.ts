@@ -149,4 +149,58 @@ PuschelzDB = {
       },
     ]);
   });
+
+  it("parses schema 17 pending reload metadata", () => {
+    const source = `
+PuschelzDB = {
+  schemaVersion = 17,
+  updatedAt = 1772571273000,
+  player = {
+    characterName = "Desktoon",
+    realmName = "Blackhand",
+  },
+  guildBank = {
+    lastScannedAt = 0,
+    tabs = {},
+  },
+  calendar = {
+    lastScannedAt = 0,
+    events = {},
+  },
+  guildOrders = {
+    lastScannedAt = 0,
+    orders = {},
+  },
+  pendingReload = {
+    subjectKey = "Desktoon-Blackhand",
+    subjectName = "Desktoon-Blackhand",
+    payloadVersion = 42,
+    payloadFingerprint = "fp-42",
+    changedScopes = { "calendar", "simc" },
+    scopeSignatures = {
+      calendar = "calendar:42",
+      simc = "simc:42",
+    },
+    createdAt = 1772571200000,
+    updatedAt = 1772571273000,
+  },
+}
+`;
+
+    const parsed = parseSavedVariables(source);
+
+    expect(parsed.pendingReload).toEqual({
+      subjectKey: "desktoon-blackhand",
+      subjectName: "Desktoon-Blackhand",
+      payloadVersion: 42,
+      payloadFingerprint: "fp-42",
+      changedScopes: ["calendar", "simc"],
+      scopeSignatures: {
+        calendar: "calendar:42",
+        simc: "simc:42",
+      },
+      createdAt: 1772571200000,
+      updatedAt: 1772571273000,
+    });
+  });
 });

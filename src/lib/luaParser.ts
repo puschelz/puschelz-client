@@ -5,6 +5,7 @@ import type {
   GuildOrder,
   GuildBankItem,
   GuildBankTab,
+  PendingReloadState,
   ParsedPuschelzDb,
   SimcRequest,
 } from "./types";
@@ -286,6 +287,50 @@ function parseSimcRequest(value: unknown): SimcRequest | undefined {
   };
 }
 
+function parseScopeSignatures(value: unknown): Record<string, string> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return {};
+  }
+
+  return Object.fromEntries(
+    Object.entries(value as Record<string, unknown>).flatMap(([key, entry]) =>
+      typeof entry === "string" && entry.length > 0 ? [[key, entry]] : []
+    )
+  );
+}
+
+function parsePendingReload(value: unknown): PendingReloadState | undefined {
+  if (!value || typeof value !== "object") {
+    return undefined;
+  }
+
+  const pending = value as Record<string, unknown>;
+  const subjectKey = asString(pending.subjectKey).trim().toLowerCase();
+  const payloadVersion = asNumber(pending.payloadVersion);
+  const payloadFingerprint = asString(pending.payloadFingerprint).trim();
+
+  if (!subjectKey || payloadVersion <= 0 || !payloadFingerprint) {
+    return undefined;
+  }
+
+  return {
+    subjectKey,
+    ...(asString(pending.subjectName).trim()
+      ? { subjectName: asString(pending.subjectName).trim() }
+      : {}),
+    payloadVersion,
+    payloadFingerprint,
+    changedScopes: asLuaArray(pending.changedScopes)
+      ?.flatMap((entry) => {
+        const scope = asString(entry).trim();
+        return scope ? [scope] : [];
+      }) ?? [],
+    scopeSignatures: parseScopeSignatures(pending.scopeSignatures),
+    ...(asNumber(pending.createdAt) > 0 ? { createdAt: asNumber(pending.createdAt) } : {}),
+    ...(asNumber(pending.updatedAt) > 0 ? { updatedAt: asNumber(pending.updatedAt) } : {}),
+  };
+}
+
 export function parseSavedVariables(luaSource: string): ParsedPuschelzDb {
   const chunk = parse(luaSource) as LuaNode;
   const body = (chunk.body as LuaNode[]) ?? [];
@@ -308,6 +353,7 @@ export function parseSavedVariables(luaSource: string): ParsedPuschelzDb {
   const calendar = (root.calendar as Record<string, unknown>) ?? {};
   const guildOrders = (root.guildOrders as Record<string, unknown>) ?? {};
   const simcRequest = parseSimcRequest(root.simcRequest);
+  const pendingReload = parsePendingReload(root.pendingReload);
 
   return {
     schemaVersion: asNumber(root.schemaVersion),
@@ -326,5 +372,6 @@ export function parseSavedVariables(luaSource: string): ParsedPuschelzDb {
       orders: parseGuildOrders(guildOrders.orders),
     },
     ...(simcRequest ? { simcRequest } : {}),
+    ...(pendingReload ? { pendingReload } : {}),
   };
 }
