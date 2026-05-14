@@ -109,8 +109,8 @@ jobs:
         shell: pwsh
         run: |
           $patterns = @(
-            "release/*.exe",
-            "release/*.blockmap",
+            "release/Puschelz-Client-Setup-*.exe",
+            "release/Puschelz-Client-Setup-*.exe.blockmap",
             "release/latest*.yml"
           )
 
@@ -126,11 +126,35 @@ jobs:
             $found | Select-Object FullName, Length -Unique
           }
 
+      - name: Verify latest.yml matches uploaded asset names
+        shell: pwsh
+        run: |
+          $latestPath = "release/latest.yml"
+          if (-not (Test-Path $latestPath)) {
+            Write-Error "release/latest.yml was not produced."
+          }
+
+          $latestContent = Get-Content -Path $latestPath -Raw
+          $manifestPaths = [regex]::Matches($latestContent, '(?m)^\s*(?:path|- url):\s+(.+)$') |
+            ForEach-Object { $_.Groups[1].Value.Trim() } |
+            Where-Object { $_ }
+
+          if ($manifestPaths.Count -eq 0) {
+            Write-Error "release/latest.yml does not reference any downloadable files."
+          }
+
+          foreach ($manifestPath in $manifestPaths | Select-Object -Unique) {
+            $resolvedPath = Join-Path "release" $manifestPath
+            if (-not (Test-Path $resolvedPath)) {
+              Write-Error "release/latest.yml references missing file: $manifestPath"
+            }
+          }
+
       - name: Upload release assets
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ needs.prepare.outputs.tag_name }}
           files: |
-            release/*.exe
-            release/*.blockmap
+            release/Puschelz-Client-Setup-*.exe
+            release/Puschelz-Client-Setup-*.exe.blockmap
             release/latest*.yml
