@@ -188,10 +188,8 @@ export class SyncService {
       }
     }
 
-    const acknowledgedAt = Date.now();
-    this.lastContentHash = hash;
-
     if (parsed.pendingReload) {
+      const acknowledgedAt = Date.now();
       await writeBridgeAcknowledgment(filePath, {
         subjectKey: parsed.pendingReload.subjectKey,
         ...(parsed.pendingReload.subjectName
@@ -202,5 +200,7 @@ export class SyncService {
         updatedAt: acknowledgedAt,
       });
     }
+
+    this.lastContentHash = hash;
   }
 }

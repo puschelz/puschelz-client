@@ -2,7 +2,16 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { writeBridgeAcknowledgment } from "./bridgeService";
 import { SyncService } from "./syncService";
+
+vi.mock("./bridgeService", async () => {
+  const actual = await vi.importActual<typeof import("./bridgeService")>("./bridgeService");
+  return {
+    ...actual,
+    writeBridgeAcknowledgment: vi.fn(actual.writeBridgeAcknowledgment),
+  };
+});
 
 const LUA_FIXTURE = `
 PuschelzDB = {
@@ -121,6 +130,7 @@ PuschelzDB = {
 describe("SyncService", () => {
   afterEach(() => {
     vi.unstubAllGlobals();
+    vi.clearAllMocks();
   });
 
   it("uses endpoint URL directly when full /api/addon-sync URL is configured", async () => {
@@ -454,6 +464,45 @@ describe("SyncService", () => {
     expect(bridgeSource).toContain("acknowledgedAt = 1772571300000");
 
     nowSpy.mockRestore();
+    fs.rmSync(tempDir, { recursive: true, force: true });
+  });
+
+  it("retries the same payload when bridge acknowledgment writing fails", async () => {
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "puschelz-sync-test-"));
+    const filePath = path.join(tempDir, "Puschelz.lua");
+    fs.writeFileSync(filePath, LUA_FIXTURE_WITH_PENDING_RELOAD, "utf8");
+
+    const fetchMock = vi.fn(async () => {
+      return new Response(JSON.stringify({ ok: true }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    vi.mocked(writeBridgeAcknowledgment)
+      .mockRejectedValueOnce(new Error("disk full"))
+      .mockResolvedValue(path.join(tempDir, "PuschelzBridge.lua"));
+
+    const service = new SyncService();
+
+    await expect(
+      service.sync(filePath, {
+        endpointUrl: "https://example.convex.site",
+        apiToken: "pz_test",
+        wowPath: "C:/World of Warcraft",
+      })
+    ).rejects.toThrow("disk full");
+
+    await service.sync(filePath, {
+      endpointUrl: "https://example.convex.site",
+      apiToken: "pz_test",
+      wowPath: "C:/World of Warcraft",
+    });
+
+    expect(fetchMock).toHaveBeenCalledTimes(6);
+    expect(writeBridgeAcknowledgment).toHaveBeenCalledTimes(2);
+
     fs.rmSync(tempDir, { recursive: true, force: true });
   });
 });

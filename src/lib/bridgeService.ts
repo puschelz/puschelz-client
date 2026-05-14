@@ -11,7 +11,7 @@ import type {
 const BRIDGE_SCHEMA_VERSION = 1;
 const BRIDGE_FETCH_TIMEOUT_MS = 10_000;
 const BRIDGE_ACK_SECTION_PATTERN =
-  /\n  syncAcknowledgments = \{\n[\s\S]*?\n  \},(?=\n\})/;
+  /\n\s*syncAcknowledgments = \{\n[\s\S]*?\n\s*\},(?=\n\})/;
 
 function escapeLuaString(value: string): string {
   return value
@@ -99,7 +99,7 @@ function isBridgeRequiredAddon(value: unknown): value is BridgeRequiredAddon {
 
 function parseBridgeAcknowledgments(luaSource: string): Record<string, BridgeSyncAcknowledgment> {
   const sectionMatch = luaSource.match(
-    /syncAcknowledgments = \{\n([\s\S]*?)\n  \},/
+    /syncAcknowledgments = \{\n([\s\S]*?)\n\s*\},/
   );
   if (!sectionMatch?.[1]) {
     return {};
