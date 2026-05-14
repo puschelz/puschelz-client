@@ -507,6 +507,8 @@ describe("BridgeService", () => {
     expect(bridgeSource).toContain(
       '["desktoon-blackhand"] = { subjectKey = "desktoon-blackhand", payloadVersion = 42, acknowledgedAt = 1773000001000 },'
     );
+    expect(bridgeSource).toContain("\r\n");
+    expect(bridgeSource.match(/(?<!\r)\n/g)).toBeNull();
 
     fs.rmSync(tempDir, { recursive: true, force: true });
   });

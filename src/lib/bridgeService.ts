@@ -63,13 +63,20 @@ function renderSyncAcknowledgment(ack: BridgeSyncAcknowledgment): string {
   return `    [${renderLuaString(ack.subjectKey)}] = { ${fields.join(", ")} },`;
 }
 
-function renderSyncAcknowledgments(acks: Record<string, BridgeSyncAcknowledgment>): string {
+function detectLineEnding(source: string | null): "\n" | "\r\n" {
+  return source?.includes("\r\n") ? "\r\n" : "\n";
+}
+
+function renderSyncAcknowledgments(
+  acks: Record<string, BridgeSyncAcknowledgment>,
+  lineEnding: "\n" | "\r\n" = "\n"
+): string {
   const lines = Object.values(acks)
     .slice()
     .sort((left, right) => left.subjectKey.localeCompare(right.subjectKey))
     .map((ack) => renderSyncAcknowledgment(ack));
 
-  return `  syncAcknowledgments = {\n${lines.join("\n")}\n  },`;
+  return `  syncAcknowledgments = {${lineEnding}${lines.join(lineEnding)}${lineEnding}  },`;
 }
 
 function resolveBridgeUrl(endpointUrl: string): string {
@@ -244,13 +251,14 @@ export async function writeBridgeAcknowledgment(
 
   const acknowledgments = existingSource ? parseBridgeAcknowledgments(existingSource) : {};
   acknowledgments[normalizedAck.subjectKey] = normalizedAck;
-  const acknowledgmentsSource = renderSyncAcknowledgments(acknowledgments);
+  const lineEnding = detectLineEnding(existingSource);
+  const acknowledgmentsSource = renderSyncAcknowledgments(acknowledgments, lineEnding);
 
   const nextSource =
     existingSource && existingSource.includes("PuschelzBridgeDB = {")
       ? BRIDGE_ACK_SECTION_PATTERN.test(existingSource)
-        ? existingSource.replace(BRIDGE_ACK_SECTION_PATTERN, `\n${acknowledgmentsSource}`)
-        : existingSource.replace(/\r?\n\}\r?\n?$/, `\n${acknowledgmentsSource}\n}\n`)
+        ? existingSource.replace(BRIDGE_ACK_SECTION_PATTERN, `${lineEnding}${acknowledgmentsSource}`)
+        : existingSource.replace(/\r?\n\}\r?\n?$/, `${lineEnding}${acknowledgmentsSource}${lineEnding}}${lineEnding}`)
       : renderBridgeLua(buildEmptyBridgeSnapshot(Date.now()), acknowledgments);
 
   await fs.mkdir(path.dirname(bridgePath), { recursive: true });
