@@ -130,9 +130,26 @@ jobs:
         shell: pwsh
         run: |
           $latestPath = "release/latest.yml"
+          $assetPatterns = @(
+            "release/Puschelz-Client-Setup-*.exe",
+            "release/Puschelz-Client-Setup-*.exe.blockmap"
+          )
+
           if (-not (Test-Path $latestPath)) {
             Write-Error "release/latest.yml was not produced."
           }
+
+          $uploadCandidates = @()
+          foreach ($pattern in $assetPatterns) {
+            $uploadCandidates += Get-ChildItem -Path $pattern -File -ErrorAction SilentlyContinue
+          }
+
+          if ($uploadCandidates.Count -eq 0) {
+            Write-Error "No uploadable installer assets were found for latest.yml validation."
+          }
+
+          $uploadNames = $uploadCandidates |
+            Select-Object -ExpandProperty Name -Unique
 
           $latestContent = Get-Content -Path $latestPath -Raw
           $manifestPaths = [regex]::Matches($latestContent, '(?m)^\s*(?:path|- url):\s+(.+)$') |
@@ -144,9 +161,9 @@ jobs:
           }
 
           foreach ($manifestPath in $manifestPaths | Select-Object -Unique) {
-            $resolvedPath = Join-Path "release" $manifestPath
-            if (-not (Test-Path $resolvedPath)) {
-              Write-Error "release/latest.yml references missing file: $manifestPath"
+            $manifestName = Split-Path -Path $manifestPath -Leaf
+            if ($manifestName -notin $uploadNames) {
+              Write-Error "release/latest.yml references a file that will not be uploaded: $manifestPath"
             }
           }
 
