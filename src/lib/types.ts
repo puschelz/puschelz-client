@@ -58,6 +58,17 @@ export type SimcRequest = {
   runDroptimizerNow: boolean;
 };
 
+export type PendingReloadState = {
+  subjectKey: string;
+  subjectName?: string;
+  payloadVersion: number;
+  payloadFingerprint: string;
+  changedScopes: string[];
+  scopeSignatures: Record<string, string>;
+  createdAt?: number;
+  updatedAt?: number;
+};
+
 export type ParsedPuschelzDb = {
   schemaVersion: number;
   updatedAt: number;
@@ -81,6 +92,7 @@ export type ParsedPuschelzDb = {
     orders: GuildOrder[];
   };
   simcRequest?: SimcRequest;
+  pendingReload?: PendingReloadState;
 };
 
 export type SyncConfig = {
@@ -115,6 +127,14 @@ export type BridgeRequiredAddon = {
   name: string;
   description?: string;
   matchFolderNames: string[];
+};
+
+export type BridgeSyncAcknowledgment = {
+  subjectKey: string;
+  subjectName?: string;
+  payloadVersion: number;
+  acknowledgedAt?: number;
+  updatedAt?: number;
 };
 
 export type BridgeSnapshot = {
