@@ -1,10 +1,17 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import { resolveSavedVariablesFile } from "./pathResolver";
-import type { BridgeRequiredAddon, BridgeSnapshot, SyncConfig } from "./types";
+import type {
+  BridgeRequiredAddon,
+  BridgeSnapshot,
+  BridgeSyncAcknowledgment,
+  SyncConfig,
+} from "./types";
 
 const BRIDGE_SCHEMA_VERSION = 1;
 const BRIDGE_FETCH_TIMEOUT_MS = 10_000;
+const BRIDGE_ACK_SECTION_PATTERN =
+  /\r?\n\s*syncAcknowledgments = \{\r?\n[\s\S]*?\r?\n\s*\},(?=\r?\n\})/;
 
 function escapeLuaString(value: string): string {
   return value
@@ -16,6 +23,14 @@ function escapeLuaString(value: string): string {
 
 function renderLuaString(value: string): string {
   return `"${escapeLuaString(value)}"`;
+}
+
+function unescapeLuaString(value: string): string {
+  return value
+    .replace(/\\\\/g, "\\")
+    .replace(/\\"/g, '"')
+    .replace(/\\n/g, "\n")
+    .replace(/\\r/g, "\r");
 }
 
 function renderLuaStringArray(values: string[]): string {
@@ -34,6 +49,34 @@ function renderRequiredAddon(addon: BridgeRequiredAddon): string {
   ].filter((value): value is string => value !== null);
 
   return `    { ${fields.join(", ")} },`;
+}
+
+function renderSyncAcknowledgment(ack: BridgeSyncAcknowledgment): string {
+  const fields = [
+    `subjectKey = ${renderLuaString(ack.subjectKey)}`,
+    ack.subjectName ? `subjectName = ${renderLuaString(ack.subjectName)}` : null,
+    `payloadVersion = ${ack.payloadVersion}`,
+    typeof ack.acknowledgedAt === "number" ? `acknowledgedAt = ${ack.acknowledgedAt}` : null,
+    typeof ack.updatedAt === "number" ? `updatedAt = ${ack.updatedAt}` : null,
+  ].filter((value): value is string => value !== null);
+
+  return `    [${renderLuaString(ack.subjectKey)}] = { ${fields.join(", ")} },`;
+}
+
+function detectLineEnding(source: string | null): "\n" | "\r\n" {
+  return source?.includes("\r\n") ? "\r\n" : "\n";
+}
+
+function renderSyncAcknowledgments(
+  acks: Record<string, BridgeSyncAcknowledgment>,
+  lineEnding: "\n" | "\r\n" = "\n"
+): string {
+  const lines = Object.values(acks)
+    .slice()
+    .sort((left, right) => left.subjectKey.localeCompare(right.subjectKey))
+    .map((ack) => renderSyncAcknowledgment(ack));
+
+  return `  syncAcknowledgments = {${lineEnding}${lines.join(lineEnding)}${lineEnding}  },`;
 }
 
 function resolveBridgeUrl(endpointUrl: string): string {
@@ -69,7 +112,61 @@ function isBridgeRequiredAddon(value: unknown): value is BridgeRequiredAddon {
   );
 }
 
-function renderBridgeLua(snapshot: BridgeSnapshot): string {
+function parseBridgeAcknowledgments(luaSource: string): Record<string, BridgeSyncAcknowledgment> {
+  const sectionMatch = luaSource.match(
+    /syncAcknowledgments = \{\r?\n([\s\S]*?)\r?\n\s*\},/
+  );
+  if (!sectionMatch?.[1]) {
+    return {};
+  }
+
+  const acknowledgments: Record<string, BridgeSyncAcknowledgment> = {};
+  const entryPattern =
+    /\["([^"]+)"\] = \{ ([^}]*) \},/g;
+
+  for (const match of sectionMatch[1].matchAll(entryPattern)) {
+    const subjectKey = match[1]?.trim().toLowerCase();
+    const fields = match[2] ?? "";
+    const payloadVersionMatch = fields.match(/payloadVersion = (\d+)/);
+
+    if (!subjectKey || !payloadVersionMatch) {
+      continue;
+    }
+
+    const subjectNameMatch = fields.match(/subjectName = "((?:\\.|[^"])*)"/);
+    const acknowledgedAtMatch = fields.match(/acknowledgedAt = (\d+)/);
+    const updatedAtMatch = fields.match(/updatedAt = (\d+)/);
+    acknowledgments[subjectKey] = {
+      subjectKey,
+      ...(subjectNameMatch?.[1]
+        ? {
+            subjectName: unescapeLuaString(subjectNameMatch[1]),
+          }
+        : {}),
+      payloadVersion: Number(payloadVersionMatch[1]),
+      ...(acknowledgedAtMatch ? { acknowledgedAt: Number(acknowledgedAtMatch[1]) } : {}),
+      ...(updatedAtMatch ? { updatedAt: Number(updatedAtMatch[1]) } : {}),
+    };
+  }
+
+  return acknowledgments;
+}
+
+async function readBridgeAcknowledgments(
+  bridgePath: string
+): Promise<Record<string, BridgeSyncAcknowledgment>> {
+  try {
+    const existing = await fs.readFile(bridgePath, "utf8");
+    return parseBridgeAcknowledgments(existing);
+  } catch {
+    return {};
+  }
+}
+
+function renderBridgeLua(
+  snapshot: BridgeSnapshot,
+  acknowledgments: Record<string, BridgeSyncAcknowledgment>
+): string {
   const recipeLines = snapshot.recipes
     .sort((left, right) => {
       if (left.spellId !== right.spellId) return left.spellId - right.spellId;
@@ -117,8 +214,56 @@ ${requestLines.join("\n")}
   requiredAddons = {
 ${requiredAddonLines.join("\n")}
   },
+${renderSyncAcknowledgments(acknowledgments)}
 }
 `;
+}
+
+function buildEmptyBridgeSnapshot(generatedAt: number): BridgeSnapshot {
+  return {
+    snapshotVersion: 0,
+    requiredAddonsVersion: 0,
+    requiredAddonsConfiguredCount: 0,
+    invalidRequiredAddonCount: 0,
+    generatedAt,
+    recipes: [],
+    openRequests: [],
+    requiredAddons: [],
+  };
+}
+
+export async function writeBridgeAcknowledgment(
+  savedVariablesFile: string,
+  acknowledgment: BridgeSyncAcknowledgment
+): Promise<string> {
+  const bridgePath = path.join(path.dirname(savedVariablesFile), "PuschelzBridge.lua");
+  const normalizedAck: BridgeSyncAcknowledgment = {
+    ...acknowledgment,
+    subjectKey: acknowledgment.subjectKey.trim().toLowerCase(),
+  };
+
+  let existingSource: string | null = null;
+  try {
+    existingSource = await fs.readFile(bridgePath, "utf8");
+  } catch {
+    existingSource = null;
+  }
+
+  const acknowledgments = existingSource ? parseBridgeAcknowledgments(existingSource) : {};
+  acknowledgments[normalizedAck.subjectKey] = normalizedAck;
+  const lineEnding = detectLineEnding(existingSource);
+  const acknowledgmentsSource = renderSyncAcknowledgments(acknowledgments, lineEnding);
+
+  const nextSource =
+    existingSource && existingSource.includes("PuschelzBridgeDB = {")
+      ? BRIDGE_ACK_SECTION_PATTERN.test(existingSource)
+        ? existingSource.replace(BRIDGE_ACK_SECTION_PATTERN, `${lineEnding}${acknowledgmentsSource}`)
+        : existingSource.replace(/\r?\n\}\r?\n?$/, `${lineEnding}${acknowledgmentsSource}${lineEnding}}${lineEnding}`)
+      : renderBridgeLua(buildEmptyBridgeSnapshot(Date.now()), acknowledgments);
+
+  await fs.mkdir(path.dirname(bridgePath), { recursive: true });
+  await fs.writeFile(bridgePath, nextSource, "utf8");
+  return bridgePath;
 }
 
 export class BridgeService {
@@ -209,7 +354,8 @@ export class BridgeService {
     };
 
     const bridgePath = path.join(path.dirname(savedVariablesFile), "PuschelzBridge.lua");
-    const renderedBridge = renderBridgeLua(snapshot);
+    const acknowledgments = await readBridgeAcknowledgments(bridgePath);
+    const renderedBridge = renderBridgeLua(snapshot, acknowledgments);
     const bridgeVersionKey = `${snapshot.snapshotVersion}:${snapshot.requiredAddonsVersion}`;
     if (
       this.lastBridgeVersionKey === bridgeVersionKey &&

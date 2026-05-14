@@ -1,7 +1,82 @@
 import fs from "node:fs/promises";
 import { createHash } from "node:crypto";
-import type { SyncConfig } from "./types";
+import type { ParsedPuschelzDb, SyncConfig } from "./types";
 import { parseSavedVariables } from "./luaParser";
+import { writeBridgeAcknowledgment } from "./bridgeService";
+
+type SyncEnvelope = {
+  type: string;
+  payload: unknown;
+  subject: {
+    subjectKey: string;
+    subjectName?: string;
+    characterName?: string;
+    realmName?: string;
+  };
+  syncContext: {
+    payloadVersion?: number;
+    payloadFingerprint?: string;
+    changedScopes?: string[];
+    scopeSignatures?: Record<string, string>;
+    createdAt?: number;
+    updatedAt?: number;
+    executor: {
+      type: "authenticatedUser";
+    };
+  };
+};
+
+function normalizeSegment(value: string | undefined): string {
+  return value?.trim().toLowerCase() ?? "";
+}
+
+function buildSubject(parsed: ParsedPuschelzDb): SyncEnvelope["subject"] {
+  const pendingSubjectKey = parsed.pendingReload?.subjectKey?.trim().toLowerCase();
+  if (pendingSubjectKey) {
+    return {
+      subjectKey: pendingSubjectKey,
+      ...(parsed.pendingReload?.subjectName ? { subjectName: parsed.pendingReload.subjectName } : {}),
+      ...(parsed.player?.characterName ? { characterName: parsed.player.characterName } : {}),
+      ...(parsed.player?.realmName ? { realmName: parsed.player.realmName } : {}),
+    };
+  }
+
+  const characterName = parsed.player?.characterName?.trim();
+  const realmName = parsed.player?.realmName?.trim();
+  const subjectKey =
+    characterName && realmName
+      ? `${normalizeSegment(characterName)}-${normalizeSegment(realmName)}`
+      : "unknown";
+
+  return {
+    subjectKey,
+    ...(characterName && realmName ? { subjectName: `${characterName}-${realmName}` } : {}),
+    ...(characterName ? { characterName } : {}),
+    ...(realmName ? { realmName } : {}),
+  };
+}
+
+function buildSyncContext(parsed: ParsedPuschelzDb): SyncEnvelope["syncContext"] {
+  return {
+    ...(parsed.pendingReload?.payloadVersion
+      ? { payloadVersion: parsed.pendingReload.payloadVersion }
+      : {}),
+    ...(parsed.pendingReload?.payloadFingerprint
+      ? { payloadFingerprint: parsed.pendingReload.payloadFingerprint }
+      : {}),
+    ...(parsed.pendingReload?.changedScopes.length
+      ? { changedScopes: parsed.pendingReload.changedScopes }
+      : {}),
+    ...(Object.keys(parsed.pendingReload?.scopeSignatures ?? {}).length > 0
+      ? { scopeSignatures: parsed.pendingReload?.scopeSignatures }
+      : {}),
+    ...(parsed.pendingReload?.createdAt ? { createdAt: parsed.pendingReload.createdAt } : {}),
+    ...(parsed.pendingReload?.updatedAt ? { updatedAt: parsed.pendingReload.updatedAt } : {}),
+    executor: {
+      type: "authenticatedUser",
+    },
+  };
+}
 
 export class SyncService {
   private lastContentHash: string | null = null;
@@ -39,22 +114,30 @@ export class SyncService {
       "Content-Type": "application/json",
       Authorization: `Bearer ${config.apiToken}`,
     };
+    const subject = buildSubject(parsed);
+    const syncContext = buildSyncContext(parsed);
 
-    const payloads: Array<{ type: string; payload: unknown }> = [
+    const payloads: SyncEnvelope[] = [
       {
         type: "guildBank",
+        subject,
+        syncContext,
         payload: {
           tabs: parsed.guildBank.tabs,
         },
       },
       {
         type: "calendar",
+        subject,
+        syncContext,
         payload: {
           events: parsed.calendar.events,
         },
       },
       {
         type: "guildOrders",
+        subject,
+        syncContext,
         payload: {
           scannedAt: parsed.guildOrders.lastScannedAt,
           orders: parsed.guildOrders.orders,
@@ -65,6 +148,8 @@ export class SyncService {
     if (parsed.simcRequest) {
       payloads.push({
         type: "simcProfile",
+        subject,
+        syncContext,
         payload: {
           requestId: parsed.simcRequest.requestId,
           scannedAt: parsed.simcRequest.requestedAt,
@@ -101,6 +186,19 @@ export class SyncService {
 
         throw new Error(`Sync failed (${response.status}) at ${syncUrl}: ${body}`);
       }
+    }
+
+    if (parsed.pendingReload) {
+      const acknowledgedAt = Date.now();
+      await writeBridgeAcknowledgment(filePath, {
+        subjectKey: parsed.pendingReload.subjectKey,
+        ...(parsed.pendingReload.subjectName
+          ? { subjectName: parsed.pendingReload.subjectName }
+          : {}),
+        payloadVersion: parsed.pendingReload.payloadVersion,
+        acknowledgedAt,
+        updatedAt: acknowledgedAt,
+      });
     }
 
     this.lastContentHash = hash;
