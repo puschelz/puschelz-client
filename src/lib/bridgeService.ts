@@ -11,7 +11,7 @@ import type {
 const BRIDGE_SCHEMA_VERSION = 1;
 const BRIDGE_FETCH_TIMEOUT_MS = 10_000;
 const BRIDGE_ACK_SECTION_PATTERN =
-  /\n\s*syncAcknowledgments = \{\n[\s\S]*?\n\s*\},(?=\n\})/;
+  /\r?\n\s*syncAcknowledgments = \{\r?\n[\s\S]*?\r?\n\s*\},(?=\r?\n\})/;
 
 function escapeLuaString(value: string): string {
   return value
@@ -23,6 +23,14 @@ function escapeLuaString(value: string): string {
 
 function renderLuaString(value: string): string {
   return `"${escapeLuaString(value)}"`;
+}
+
+function unescapeLuaString(value: string): string {
+  return value
+    .replace(/\\\\/g, "\\")
+    .replace(/\\"/g, '"')
+    .replace(/\\n/g, "\n")
+    .replace(/\\r/g, "\r");
 }
 
 function renderLuaStringArray(values: string[]): string {
@@ -99,7 +107,7 @@ function isBridgeRequiredAddon(value: unknown): value is BridgeRequiredAddon {
 
 function parseBridgeAcknowledgments(luaSource: string): Record<string, BridgeSyncAcknowledgment> {
   const sectionMatch = luaSource.match(
-    /syncAcknowledgments = \{\n([\s\S]*?)\n\s*\},/
+    /syncAcknowledgments = \{\r?\n([\s\S]*?)\r?\n\s*\},/
   );
   if (!sectionMatch?.[1]) {
     return {};
@@ -125,11 +133,7 @@ function parseBridgeAcknowledgments(luaSource: string): Record<string, BridgeSyn
       subjectKey,
       ...(subjectNameMatch?.[1]
         ? {
-            subjectName: subjectNameMatch[1]
-              .replace(/\\"/g, '"')
-              .replace(/\\\\/g, "\\")
-              .replace(/\\n/g, "\n")
-              .replace(/\\r/g, "\r"),
+            subjectName: unescapeLuaString(subjectNameMatch[1]),
           }
         : {}),
       payloadVersion: Number(payloadVersionMatch[1]),
@@ -246,7 +250,7 @@ export async function writeBridgeAcknowledgment(
     existingSource && existingSource.includes("PuschelzBridgeDB = {")
       ? BRIDGE_ACK_SECTION_PATTERN.test(existingSource)
         ? existingSource.replace(BRIDGE_ACK_SECTION_PATTERN, `\n${acknowledgmentsSource}`)
-        : existingSource.replace(/\n\}\n?$/, `\n${acknowledgmentsSource}\n}\n`)
+        : existingSource.replace(/\r?\n\}\r?\n?$/, `\n${acknowledgmentsSource}\n}\n`)
       : renderBridgeLua(buildEmptyBridgeSnapshot(Date.now()), acknowledgments);
 
   await fs.mkdir(path.dirname(bridgePath), { recursive: true });
