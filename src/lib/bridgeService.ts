@@ -243,7 +243,7 @@ function parseBridgeAcknowledgments(luaSource: string): Record<string, BridgeSyn
       };
 
       const payloadVersion = numberField("payloadVersion");
-      if (!subjectKey || !payloadVersion) {
+      if (!subjectKey || typeof payloadVersion !== "number") {
         continue;
       }
 
@@ -254,8 +254,8 @@ function parseBridgeAcknowledgments(luaSource: string): Record<string, BridgeSyn
         subjectKey,
         ...(subjectName ? { subjectName: unescapeLuaString(subjectName) } : {}),
         payloadVersion,
-        ...(acknowledgedAt ? { acknowledgedAt } : {}),
-        ...(updatedAt ? { updatedAt } : {}),
+        ...(typeof acknowledgedAt === "number" ? { acknowledgedAt } : {}),
+        ...(typeof updatedAt === "number" ? { updatedAt } : {}),
       };
     }
   }
