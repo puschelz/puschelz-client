@@ -534,10 +534,12 @@ function getCallbacks() {
     onSyncStart: (detail: string) => {
       setStatus({ state: "syncing", detail });
     },
-    onSyncSuccess: () => {
+    onSyncSuccess: (result: { wroteBridgeAcknowledgment: boolean }) => {
       setStatus({
         state: "watching",
-        detail: "Last synced just now",
+        detail: result.wroteBridgeAcknowledgment
+          ? "Last synced just now. The in-game pending dot clears on the next /reload or login."
+          : "Last synced just now",
         lastSyncedAt: Date.now(),
       });
     },

@@ -406,12 +406,13 @@ describe("SyncService", () => {
     const nowSpy = vi.spyOn(Date, "now").mockReturnValue(1772571300000);
 
     const service = new SyncService();
-    await service.sync(filePath, {
+    const result = await service.sync(filePath, {
       endpointUrl: "https://example.convex.site",
       apiToken: "pz_test",
       wowPath: "C:/World of Warcraft",
     });
 
+    expect(result).toEqual({ wroteBridgeAcknowledgment: true });
     expect(fetchMock).toHaveBeenCalledTimes(3);
     const [, firstRequest] = fetchMock.mock.calls[0] ?? [];
     expect(typeof firstRequest?.body).toBe("string");

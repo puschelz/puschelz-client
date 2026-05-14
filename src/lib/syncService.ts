@@ -26,6 +26,10 @@ type SyncEnvelope = {
   };
 };
 
+export type SyncResult = {
+  wroteBridgeAcknowledgment: boolean;
+};
+
 function normalizeSegment(value: string | undefined): string {
   return value?.trim().toLowerCase() ?? "";
 }
@@ -89,7 +93,7 @@ export class SyncService {
     return `${trimmed}/api/addon-sync`;
   }
 
-  async sync(filePath: string, config: SyncConfig): Promise<void> {
+  async sync(filePath: string, config: SyncConfig): Promise<SyncResult> {
     const missing: string[] = [];
     if (!config.endpointUrl.trim()) {
       missing.push("endpoint URL");
@@ -104,7 +108,7 @@ export class SyncService {
     const source = await fs.readFile(filePath, "utf8");
     const hash = createHash("sha256").update(source).digest("hex");
     if (hash === this.lastContentHash) {
-      return;
+      return { wroteBridgeAcknowledgment: false };
     }
 
     const parsed = parseSavedVariables(source);
@@ -188,6 +192,7 @@ export class SyncService {
       }
     }
 
+    let wroteBridgeAcknowledgment = false;
     if (parsed.pendingReload) {
       const acknowledgedAt = Date.now();
       await writeBridgeAcknowledgment(filePath, {
@@ -199,8 +204,10 @@ export class SyncService {
         acknowledgedAt,
         updatedAt: acknowledgedAt,
       });
+      wroteBridgeAcknowledgment = true;
     }
 
     this.lastContentHash = hash;
+    return { wroteBridgeAcknowledgment };
   }
 }
