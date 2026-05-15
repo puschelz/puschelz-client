@@ -63,7 +63,7 @@ The client resolves one file using this order:
 2. `<wowPath>/_retail_/WTF/Account/*/SavedVariables/Puschelz.lua`
 3. `<wowPath>/WTF/Account/*/SavedVariables/Puschelz.lua`
 
-If multiple account matches exist, the most recently modified file is used.
+If multiple account matches exist, the client stops with an error and asks you to select the exact `SavedVariables/Puschelz.lua` file.
 
 ## WoW path auto-detection
 

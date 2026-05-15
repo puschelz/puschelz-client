@@ -30,6 +30,12 @@ export async function resolveSavedVariablesFile(inputPath: string): Promise<stri
     return null;
   }
 
+  if (candidates.length > 1) {
+    throw new Error(
+      "Multiple Puschelz.lua files were found under the configured WoW path. Select the exact SavedVariables/Puschelz.lua file in Settings."
+    );
+  }
+
   const ranked = candidates
     .map((file) => ({ file, mtime: fs.statSync(file).mtimeMs }))
     .sort((a, b) => b.mtime - a.mtime);
