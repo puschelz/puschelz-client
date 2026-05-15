@@ -13,7 +13,7 @@ import {
 } from "electron";
 import type { OpenDialogOptions } from "electron";
 import { autoUpdater, type ProgressInfo, type UpdateInfo } from "electron-updater";
-import { AddonWatcher } from "./lib/addonWatcher";
+import { AddonWatcher, type WatchCallbacks } from "./lib/addonWatcher";
 import { BridgeService } from "./lib/bridgeService";
 import { ConfigStore } from "./lib/configStore";
 import type { RendererState, SyncConfig, SyncStatus, UpdateStatus } from "./lib/types";
@@ -529,15 +529,17 @@ function configureAutoUpdates(): void {
   void checkForUpdates({ userInitiated: false }).catch(() => {});
 }
 
-function getCallbacks() {
+function getCallbacks(): WatchCallbacks {
   return {
     onSyncStart: (detail: string) => {
       setStatus({ state: "syncing", detail });
     },
-    onSyncSuccess: () => {
+    onSyncSuccess: (result) => {
       setStatus({
         state: "watching",
-        detail: "Last synced just now",
+        detail: result.wroteBridgeAcknowledgment
+          ? "Last synced just now. The in-game pending dot clears on the next /reload or login."
+          : "Last synced just now",
         lastSyncedAt: Date.now(),
       });
     },

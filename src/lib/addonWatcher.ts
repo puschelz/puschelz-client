@@ -1,14 +1,14 @@
 import chokidar, { type FSWatcher } from "chokidar";
 import type { SyncConfig } from "./types";
 import { resolveSavedVariablesFile } from "./pathResolver";
-import { SyncService } from "./syncService";
+import { SyncService, type SyncResult } from "./syncService";
 
 const SAVED_VARIABLES_WRITE_STABILITY_MS = 3000;
 const SAVED_VARIABLES_SYNC_DEBOUNCE_MS = 1500;
 
 export type WatchCallbacks = {
   onSyncStart: (detail: string) => void;
-  onSyncSuccess: () => void;
+  onSyncSuccess: (result: SyncResult) => void;
   onError: (message: string) => void;
   onWatching: (filePath: string) => void;
 };
@@ -102,8 +102,8 @@ export class AddonWatcher {
     callbacks.onSyncStart(reason);
 
     try {
-      await this.syncService.sync(this.filePath, config);
-      callbacks.onSyncSuccess();
+      const result = await this.syncService.sync(this.filePath, config);
+      callbacks.onSyncSuccess(result);
     } catch (error) {
       callbacks.onError(error instanceof Error ? error.message : String(error));
       throw error;

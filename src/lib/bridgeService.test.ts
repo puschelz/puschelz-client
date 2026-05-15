@@ -466,6 +466,111 @@ describe("BridgeService", () => {
     fs.rmSync(tempDir, { recursive: true, force: true });
   });
 
+  it("replaces WoW-saved bracket-style sync acknowledgments", async () => {
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "puschelz-bridge-test-"));
+    const savedVariablesPath = path.join(tempDir, "Puschelz.lua");
+    const bridgePath = path.join(tempDir, "PuschelzBridge.lua");
+    fs.writeFileSync(savedVariablesPath, LUA_FIXTURE, "utf8");
+    fs.writeFileSync(
+      bridgePath,
+      `PuschelzBridgeDB = {
+["syncAcknowledgments"] = {
+["old-blackhand"] = {
+["payloadVersion"] = 5,
+["subjectKey"] = "old-blackhand",
+["acknowledgedAt"] = 1773000000000,
+},
+},
+["invalidRequiredAddonCount"] = 0,
+["schemaVersion"] = 1,
+["requiredAddonsVersion"] = 170,
+["snapshotVersion"] = 77,
+["requiredAddonsConfiguredCount"] = 1,
+["recipesByKey"] = {
+["447379:225646"] = {
+["crafterCount"] = 2,
+["matchedCharacterKeys"] = {
+"treatisecrafter-blackhand",
+},
+},
+},
+["openRequests"] = {
+},
+["requiredAddons"] = {
+},
+["generatedAt"] = 1773000000000,
+}
+`,
+      "utf8"
+    );
+
+    await writeBridgeAcknowledgment(savedVariablesPath, {
+      subjectKey: "Desktoon-Blackhand",
+      payloadVersion: 42,
+      acknowledgedAt: 1773000001000,
+    });
+
+    const bridgeSource = fs.readFileSync(bridgePath, "utf8");
+    expect(bridgeSource.match(/syncAcknowledgments/g)).toHaveLength(1);
+    expect(bridgeSource).not.toContain('["syncAcknowledgments"]');
+    expect(bridgeSource).toContain("snapshotVersion");
+    expect(bridgeSource).toContain('["447379:225646"]');
+    expect(bridgeSource).toContain(
+      '["desktoon-blackhand"] = { subjectKey = "desktoon-blackhand", payloadVersion = 42, acknowledgedAt = 1773000001000 },'
+    );
+
+    fs.rmSync(tempDir, { recursive: true, force: true });
+  });
+
+  it("collapses duplicate WoW and desktop sync acknowledgment sections", async () => {
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "puschelz-bridge-test-"));
+    const savedVariablesPath = path.join(tempDir, "Puschelz.lua");
+    const bridgePath = path.join(tempDir, "PuschelzBridge.lua");
+    fs.writeFileSync(savedVariablesPath, LUA_FIXTURE, "utf8");
+    fs.writeFileSync(
+      bridgePath,
+      `PuschelzBridgeDB = {
+["syncAcknowledgments"] = {
+},
+["schemaVersion"] = 1,
+["snapshotVersion"] = 77,
+["requiredAddonsVersion"] = 170,
+["requiredAddonsConfiguredCount"] = 1,
+["invalidRequiredAddonCount"] = 0,
+["recipesByKey"] = {
+},
+["openRequests"] = {
+},
+["requiredAddons"] = {
+},
+["generatedAt"] = 1773000000000,
+  syncAcknowledgments = {
+    ["thyphoon-antonidas"] = { subjectKey = "thyphoon-antonidas", subjectName = "Thyphoon-Antonidas", payloadVersion = 2, acknowledgedAt = 1778788617928, updatedAt = 1778788617928 },
+  },
+}
+`,
+      "utf8"
+    );
+
+    await writeBridgeAcknowledgment(savedVariablesPath, {
+      subjectKey: "Desktoon-Blackhand",
+      payloadVersion: 42,
+      acknowledgedAt: 1773000001000,
+    });
+
+    const bridgeSource = fs.readFileSync(bridgePath, "utf8");
+    expect(bridgeSource.match(/syncAcknowledgments/g)).toHaveLength(1);
+    expect(bridgeSource).not.toContain('["syncAcknowledgments"]');
+    expect(bridgeSource).toContain(
+      '["thyphoon-antonidas"] = { subjectKey = "thyphoon-antonidas", subjectName = "Thyphoon-Antonidas", payloadVersion = 2, acknowledgedAt = 1778788617928, updatedAt = 1778788617928 },'
+    );
+    expect(bridgeSource).toContain(
+      '["desktoon-blackhand"] = { subjectKey = "desktoon-blackhand", payloadVersion = 42, acknowledgedAt = 1773000001000 },'
+    );
+
+    fs.rmSync(tempDir, { recursive: true, force: true });
+  });
+
   it("preserves and updates sync acknowledgments in CRLF bridge files", async () => {
     const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "puschelz-bridge-test-"));
     const savedVariablesPath = path.join(tempDir, "Puschelz.lua");
@@ -567,6 +672,65 @@ describe("BridgeService", () => {
   syncAcknowledgments = {
     ["desktoon-blackhand"] = { subjectKey = "desktoon-blackhand", payloadVersion = 41, acknowledgedAt = 1773000001000 },
   },
+}
+`,
+      "utf8"
+    );
+    vi.mocked(resolveSavedVariablesFile).mockResolvedValue(filePath);
+
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => {
+        return new Response(JSON.stringify(makeSnapshot(99)), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        });
+      })
+    );
+
+    const service = new BridgeService();
+    await service.refresh({
+      endpointUrl: "https://puschelz.de",
+      apiToken: "pz_test",
+      wowPath: "/unused/by-mock",
+    });
+
+    const bridgeSource = fs.readFileSync(bridgePath, "utf8");
+    expect(bridgeSource).toContain("snapshotVersion = 99");
+    expect(bridgeSource).toContain(
+      '["desktoon-blackhand"] = { subjectKey = "desktoon-blackhand", payloadVersion = 41, acknowledgedAt = 1773000001000 },'
+    );
+
+    fs.rmSync(tempDir, { recursive: true, force: true });
+  });
+
+  it("preserves WoW-saved bracket-style sync acknowledgments when refreshing bridge data", async () => {
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "puschelz-bridge-test-"));
+    const filePath = path.join(tempDir, "Puschelz.lua");
+    const bridgePath = path.join(tempDir, "PuschelzBridge.lua");
+    fs.writeFileSync(filePath, LUA_FIXTURE, "utf8");
+    fs.writeFileSync(
+      bridgePath,
+      `PuschelzBridgeDB = {
+["syncAcknowledgments"] = {
+["desktoon-blackhand"] = {
+["subjectKey"] = "desktoon-blackhand",
+["payloadVersion"] = 41,
+["acknowledgedAt"] = 1773000001000,
+},
+},
+["schemaVersion"] = 1,
+["snapshotVersion"] = 11,
+["requiredAddonsVersion"] = 111,
+["requiredAddonsConfiguredCount"] = 0,
+["invalidRequiredAddonCount"] = 0,
+["generatedAt"] = 1773000000000,
+["recipesByKey"] = {
+},
+["openRequests"] = {
+},
+["requiredAddons"] = {
+},
 }
 `,
       "utf8"
