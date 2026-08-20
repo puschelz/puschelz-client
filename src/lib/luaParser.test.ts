@@ -15,141 +15,6 @@ describe("parseSavedVariables", () => {
     expect(parsed).toEqual(expected);
   });
 
-  it("parses explicitly indexed Lua tables for calendar events and attendees", () => {
-    const source = `
-PuschelzDB = {
-  ["schemaVersion"] = 15,
-  ["updatedAt"] = 1771778730000,
-  ["guildBank"] = {
-    ["lastScannedAt"] = 1771778727000,
-    ["tabs"] = {
-      [1] = {
-        ["tabIndex"] = 0,
-        ["tabName"] = "Consumables",
-        ["items"] = {
-          [1] = {
-            ["slotIndex"] = 0,
-            ["itemId"] = 191381,
-            ["itemName"] = "Phial of Tepid Versatility",
-            ["itemIcon"] = "134829",
-            ["quantity"] = 20,
-          },
-        },
-      },
-    },
-  },
-  ["calendar"] = {
-    ["lastScannedAt"] = 1771778727000,
-    ["events"] = {
-      [1] = {
-        ["wowEventId"] = 6653320,
-        ["attendees"] = {
-          [1] = {
-            ["name"] = "Aeyzomage-Blackmoore",
-            ["status"] = "signedUp",
-          },
-          [2] = {
-            ["name"] = "Foo-Bar",
-            ["status"] = "tentative",
-          },
-        },
-        ["endTime"] = 1770759000000,
-        ["startTime"] = 1770748200000,
-        ["eventType"] = "raid",
-        ["title"] = "ID Fortsetzung",
-      },
-      [2] = {
-        ["wowEventId"] = 1670,
-        ["endTime"] = 1771992000000,
-        ["startTime"] = 1769572800000,
-        ["eventType"] = "world",
-        ["title"] = "Winds of Mysterious Fortune",
-      },
-    },
-  },
-  ["guildOrders"] = {
-    ["lastScannedAt"] = 1771778727000,
-    ["orders"] = {
-      [1] = {
-        ["orderId"] = 777,
-        ["itemId"] = 225646,
-        ["spellId"] = 447379,
-        ["orderType"] = "guild",
-        ["orderState"] = 2,
-        ["expirationTime"] = 1771992000000,
-        ["minQuality"] = 3,
-        ["tipAmount"] = 150000,
-        ["consortiumCut"] = 0,
-        ["isRecraft"] = false,
-        ["isFulfillable"] = true,
-        ["reagentState"] = 0,
-        ["customerName"] = "Requester-Blackhand",
-        ["customerNotes"] = "Need for raid",
-        ["outputItemHyperlink"] = "|cff0070dd|Hitem:225646::::::::80:::::|h[Blessed Weapon Grip]|h|r",
-      },
-    },
-  },
-}
-`;
-
-    const parsed = parseSavedVariables(source);
-    expect(parsed.guildBank.tabs).toEqual([
-      {
-        tabIndex: 0,
-        tabName: "Consumables",
-        items: [
-          {
-            slotIndex: 0,
-            itemId: 191381,
-            itemName: "Phial of Tepid Versatility",
-            itemIcon: "134829",
-            quantity: 20,
-          },
-        ],
-      },
-    ]);
-    expect(parsed.calendar.events).toEqual([
-      {
-        wowEventId: 6653320,
-        title: "ID Fortsetzung",
-        eventType: "raid",
-        startTime: 1770748200000,
-        endTime: 1770759000000,
-        attendees: [
-          { name: "Aeyzomage-Blackmoore", status: "signedUp" },
-          { name: "Foo-Bar", status: "tentative" },
-        ],
-      },
-      {
-        wowEventId: 1670,
-        title: "Winds of Mysterious Fortune",
-        eventType: "world",
-        startTime: 1769572800000,
-        endTime: 1771992000000,
-      },
-    ]);
-    expect(parsed.guildOrders.orders).toEqual([
-      {
-        orderId: 777,
-        itemId: 225646,
-        spellId: 447379,
-        orderType: "guild",
-        orderState: 2,
-        expirationTime: 1771992000000,
-        minQuality: 3,
-        tipAmount: 150000,
-        consortiumCut: 0,
-        isRecraft: false,
-        isFulfillable: true,
-        reagentState: 0,
-        customerName: "Requester-Blackhand",
-        customerNotes: "Need for raid",
-        outputItemHyperlink:
-          "|cff0070dd|Hitem:225646::::::::80:::::|h[Blessed Weapon Grip]|h|r",
-      },
-    ]);
-  });
-
   it("parses schema 17 pending reload metadata", () => {
     const source = `
 PuschelzDB = {
@@ -163,10 +28,6 @@ PuschelzDB = {
     lastScannedAt = 0,
     tabs = {},
   },
-  calendar = {
-    lastScannedAt = 0,
-    events = {},
-  },
   guildOrders = {
     lastScannedAt = 0,
     orders = {},
@@ -176,9 +37,8 @@ PuschelzDB = {
     subjectName = "Desktoon-Blackhand",
     payloadVersion = 42,
     payloadFingerprint = "fp-42",
-    changedScopes = { "calendar", "simc" },
+    changedScopes = { "simc" },
     scopeSignatures = {
-      calendar = "calendar:42",
       simc = "simc:42",
     },
     createdAt = 1772571200000,
@@ -194,9 +54,8 @@ PuschelzDB = {
       subjectName: "Desktoon-Blackhand",
       payloadVersion: 42,
       payloadFingerprint: "fp-42",
-      changedScopes: ["calendar", "simc"],
+      changedScopes: ["simc"],
       scopeSignatures: {
-        calendar: "calendar:42",
         simc: "simc:42",
       },
       createdAt: 1772571200000,

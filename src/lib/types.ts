@@ -12,20 +12,6 @@ export type GuildBankTab = {
   items: GuildBankItem[];
 };
 
-export type CalendarEvent = {
-  wowEventId: number;
-  title: string;
-  eventType: "raid" | "world";
-  startTime: number;
-  endTime: number;
-  attendees?: CalendarEventAttendee[];
-};
-
-export type CalendarEventAttendee = {
-  name: string;
-  status: "signedUp" | "tentative";
-};
-
 export type GuildOrder = {
   orderId: number;
   itemId: number;
@@ -82,10 +68,6 @@ export type ParsedPuschelzDb = {
   guildBank: {
     lastScannedAt: number;
     tabs: GuildBankTab[];
-  };
-  calendar: {
-    lastScannedAt: number;
-    events: CalendarEvent[];
   };
   guildOrders: {
     lastScannedAt: number;

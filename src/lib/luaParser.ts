@@ -1,7 +1,5 @@
 import { parse } from "luaparse";
 import type {
-  CalendarEvent,
-  CalendarEventAttendee,
   GuildOrder,
   GuildBankItem,
   GuildBankTab,
@@ -165,48 +163,6 @@ function parseGuildBankTabs(value: unknown): GuildBankTab[] {
     }));
 }
 
-function parseCalendarAttendees(value: unknown): CalendarEventAttendee[] | undefined {
-  const rows = asLuaArray(value);
-  if (!rows) {
-    return undefined;
-  }
-
-  const attendees = rows
-    .filter((attendee): attendee is Record<string, unknown> => !!attendee && typeof attendee === "object")
-    .map((attendee) => {
-      const name = asString(attendee.name);
-      const status = asString(attendee.status);
-      if (!name || (status !== "signedUp" && status !== "tentative")) {
-        return null;
-      }
-      return { name, status };
-    })
-    .filter((attendee): attendee is CalendarEventAttendee => attendee !== null);
-
-  return attendees.length > 0 ? attendees : undefined;
-}
-
-function parseCalendarEvents(value: unknown): CalendarEvent[] {
-  const rows = asLuaArray(value);
-  if (!rows) {
-    return [];
-  }
-
-  return rows
-    .filter((event): event is Record<string, unknown> => !!event && typeof event === "object")
-    .map((event) => {
-      const attendees = parseCalendarAttendees(event.attendees);
-      return {
-        wowEventId: asNumber(event.wowEventId),
-        title: asString(event.title),
-        eventType: event.eventType === "world" ? "world" : "raid",
-        startTime: asNumber(event.startTime),
-        endTime: asNumber(event.endTime),
-        ...(attendees ? { attendees } : {}),
-      };
-    });
-}
-
 function parseGuildOrders(value: unknown): GuildOrder[] {
   const rows = asLuaArray(value);
   if (!rows) {
@@ -350,7 +306,6 @@ export function parseSavedVariables(luaSource: string): ParsedPuschelzDb {
 
   const root = toValue(init) as Record<string, unknown>;
   const guildBank = (root.guildBank as Record<string, unknown>) ?? {};
-  const calendar = (root.calendar as Record<string, unknown>) ?? {};
   const guildOrders = (root.guildOrders as Record<string, unknown>) ?? {};
   const simcRequest = parseSimcRequest(root.simcRequest);
   const pendingReload = parsePendingReload(root.pendingReload);
@@ -362,10 +317,6 @@ export function parseSavedVariables(luaSource: string): ParsedPuschelzDb {
     guildBank: {
       lastScannedAt: asNumber(guildBank.lastScannedAt),
       tabs: parseGuildBankTabs(guildBank.tabs),
-    },
-    calendar: {
-      lastScannedAt: asNumber(calendar.lastScannedAt),
-      events: parseCalendarEvents(calendar.events),
     },
     guildOrders: {
       lastScannedAt: asNumber(guildOrders.lastScannedAt),
