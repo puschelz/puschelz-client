@@ -1,6 +1,6 @@
 # Puschelz Desktop Client (V16)
 
-Tray app that watches WoW `SavedVariables/Puschelz.lua`, syncs guild bank, calendar, guild-order, and SimulationCraft export data to `/api/addon-sync`, and refreshes the companion bridge file from `/api/addon-bridge`.
+Tray app that watches WoW `SavedVariables/Puschelz.lua`, syncs guild-bank, guild-order, and SimulationCraft export data to `/api/addon-sync`, and refreshes the companion bridge file from `/api/addon-bridge`.
 
 ## Features
 
@@ -8,7 +8,6 @@ Tray app that watches WoW `SavedVariables/Puschelz.lua`, syncs guild bank, calen
 - Watches `Puschelz.lua` for changes
 - Parses Lua SavedVariables and POSTs one payload per captured sync lane:
   - `type: "guildBank"`
-  - `type: "calendar"`
   - `type: "guildOrders"`
   - `type: "simcProfile"` when the addon has queued a SimC export request
 - Uses API token from Puschelz profile page

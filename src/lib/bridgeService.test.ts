@@ -17,10 +17,6 @@ PuschelzDB = {
     lastScannedAt = 1739400000000,
     tabs = {},
   },
-  calendar = {
-    lastScannedAt = 1739403600000,
-    events = {},
-  },
   guildOrders = {
     lastScannedAt = 1739407200000,
     orders = {},

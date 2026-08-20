@@ -131,14 +131,6 @@ export class SyncService {
         },
       },
       {
-        type: "calendar",
-        subject,
-        syncContext,
-        payload: {
-          events: parsed.calendar.events,
-        },
-      },
-      {
         type: "guildOrders",
         subject,
         syncContext,
